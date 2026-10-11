@@ -1,9 +1,12 @@
 # Guía de despliegue en Render
 
-Esta guía deja MealMap publicado en la nube con **despliegue automático**: cada push a `main` ejecuta las pruebas en GitHub Actions y, solo si pasan, Render publica la nueva versión.
+Esta guía deja MealMap publicado en la nube con **despliegue automático**: cada push a `main` ejecuta las pruebas y la colección de Postman en GitHub Actions y, solo si pasan, Render publica la nueva versión. (El pipeline también corre en los pushes a las demás ramas, pero sin desplegar.)
 
 ```
 push a main ──► GitHub Actions: lint → build → pruebas (80 % de cobertura)
+                        │ si pasan
+                        ▼
+                 job "postman": API + PostgreSQL de prueba → colección con Newman
                         │ si todo pasa
                         ▼
                  job "deploy" ──► deploy hook ──► Render: build → migraciones → API en línea
@@ -79,7 +82,7 @@ El job `deploy` de [`.github/workflows/ci-cd.yml`](../.github/workflows/ci-cd.ym
 
 ## Paso 7 — Verificar el pipeline completo
 1. Haz un cambio pequeño (por ejemplo, una línea en el README) y súbelo a `main`.
-2. En GitHub → pestaña **Actions**: debe correr **CI/CD**. El job *Pruebas* en verde, y después *Despliegue a Render* en verde.
+2. En GitHub → pestaña **Actions**: debe correr **CI/CD**. Los jobs *Pruebas* y *Pruebas de Postman (Newman)* en verde, y después *Despliegue a Render* en verde.
 3. En Render → **Events**: aparece un despliegue nuevo, disparado por el hook.
 
 Guarda **capturas** de la pestaña Actions en verde y del servicio en estado *Live*: sirven para el informe.

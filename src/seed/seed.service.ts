@@ -6,7 +6,7 @@ import { Category } from '../categories/entities/category.entity.js';
 import { Ingredient } from '../ingredients/entities/ingredient.entity.js';
 import { RecipeIngredient } from '../recipes/entities/recipe-ingredient.entity.js';
 import { Recipe } from '../recipes/entities/recipe.entity.js';
-import { Unit } from '../recipes/enums/unit.enum.js';
+import { computeMacrosPerServing } from '../recipes/recipe-macros.js';
 import { User } from '../users/entities/user.entity.js';
 import { Role } from '../users/enums/role.enum.js';
 import { CATEGORIES } from './data/categories.data.js';
@@ -26,8 +26,6 @@ export interface SeedSummary {
 }
 
 const BCRYPT_ROUNDS = 10;
-
-const round2 = (n: number) => Math.round(n * 100) / 100;
 
 @Injectable()
 export class SeedService {
@@ -67,12 +65,19 @@ export class SeedService {
 
       // Ingredientes
       const ingredients = new Map<string, Ingredient>();
-      for (const { gramsPerUnit: _ignored, ...data } of INGREDIENTS) {
-        let ingredient = await manager.findOneBy(Ingredient, { name: data.name });
+      for (const data of INGREDIENTS) {
+        let ingredient = await manager.findOneBy(Ingredient, {
+          name: data.name,
+        });
         if (ingredient) {
           summary.ingredients.skipped++;
         } else {
-          ingredient = await manager.save(manager.create(Ingredient, data));
+          ingredient = await manager.save(
+            manager.create(Ingredient, {
+              ...data,
+              gramsPerUnit: data.gramsPerUnit ?? null,
+            }),
+          );
           summary.ingredients.created++;
         }
         ingredients.set(data.name, ingredient);
@@ -98,14 +103,16 @@ export class SeedService {
             prepTimeMinutes: seed.prepTimeMinutes,
             servingSize: seed.servingSize,
             categoryId: category.id,
-            ...this.computeMacrosPerServing(seed, seedByIngredient),
+            ...this.macrosOf(seed, seedByIngredient),
           }),
         );
 
         const rows = seed.ingredients.map((line) => {
           const ingredient = ingredients.get(line.ingredient);
           if (!ingredient) {
-            throw new Error(`Ingrediente inexistente en el seed: ${line.ingredient}`);
+            throw new Error(
+              `Ingrediente inexistente en el seed: ${line.ingredient}`,
+            );
           }
           return manager.create(RecipeIngredient, {
             recipeId: recipe.id,
@@ -136,38 +143,21 @@ export class SeedService {
     });
   }
 
-  // Suma los macros de cada ingrediente y los divide entre las porciones de la receta.
-  // ml se trata como g (densidad ~1); 'unidad' usa gramsPerUnit del ingrediente.
-  private computeMacrosPerServing(
+  // Macros por porción con los valores del archivo del seed (no con los de la base,
+  // para que el resultado no dependa de cambios hechos después por un ADMIN)
+  private macrosOf(
     recipe: RecipeSeed,
     seedByIngredient: Map<string, IngredientSeed>,
   ) {
-    const total = { calories: 0, protein: 0, carbs: 0, fat: 0 };
-
-    for (const line of recipe.ingredients) {
+    const lines = recipe.ingredients.map((line) => {
       const data = seedByIngredient.get(line.ingredient);
       if (!data) {
-        throw new Error(`Ingrediente inexistente en el seed: ${line.ingredient}`);
+        throw new Error(
+          `Ingrediente inexistente en el seed: ${line.ingredient}`,
+        );
       }
-      const grams =
-        line.unit === Unit.UNIT
-          ? line.quantity * (data.gramsPerUnit ?? 0)
-          : line.quantity;
-      if (line.unit === Unit.UNIT && !data.gramsPerUnit) {
-        throw new Error(`Falta gramsPerUnit para ${line.ingredient}`);
-      }
-      const factor = grams / 100;
-      total.calories += data.caloriesPer100g * factor;
-      total.protein += data.proteinPer100g * factor;
-      total.carbs += data.carbsPer100g * factor;
-      total.fat += data.fatPer100g * factor;
-    }
-
-    return {
-      calories: round2(total.calories / recipe.servingSize),
-      protein: round2(total.protein / recipe.servingSize),
-      carbs: round2(total.carbs / recipe.servingSize),
-      fat: round2(total.fat / recipe.servingSize),
-    };
+      return { quantity: line.quantity, unit: line.unit, ingredient: data };
+    });
+    return computeMacrosPerServing(lines, recipe.servingSize);
   }
 }

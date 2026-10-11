@@ -1,0 +1,22 @@
+#!/bin/sh
+# Hook de git que se ejecuta antes de cada push (se activa con `npm install`, ver el script
+# "prepare" de package.json). Corre lint, build y las pruebas unitarias; si algo falla, el
+# push se cancela. Las pruebas de integración no se corren aquí porque necesitan Docker:
+# esas las corre GitHub Actions.
+
+run() {
+  echo "pre-push: npm run $1"
+  if ! npm run --silent "$1"; then
+    echo ""
+    echo "pre-push: falló 'npm run $1'. El push se canceló."
+    echo "Corrige el error y vuelve a intentarlo. Solo en una emergencia puedes saltarte"
+    echo "esta verificación con: git push --no-verify"
+    exit 1
+  fi
+}
+
+run lint
+run build
+run test
+
+echo "pre-push: lint, build y pruebas unitarias en verde."

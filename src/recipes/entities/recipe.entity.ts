@@ -2,6 +2,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
@@ -10,6 +11,9 @@ import { Category } from '../../categories/entities/category.entity.js';
 import { decimalTransformer } from '../../common/transformers/decimal.transformer.js';
 
 @Entity('recipes')
+// Índice único sobre LOWER("name"), creado por la migración AddLowerNameUniqueIndexes.
+// synchronize: false porque TypeORM no sabe crear índices sobre expresiones; así tampoco lo borra.
+@Index('IDX_recipes_name_lower', { synchronize: false })
 export class Recipe {
   @PrimaryGeneratedColumn('uuid')
   id: string;
