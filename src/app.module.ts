@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { buildDatabaseOptions } from './database/database.config.js';
 import { UsersModule } from './users/users.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { CategoriesModule } from './categories/categories.module.js';
@@ -16,15 +17,8 @@ import { SeedModule } from './seed/seed.module.js';
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        type: 'postgres',
-        host: config.get<string>('DB_HOST'),
-        port: config.get<number>('DB_PORT'),
-        username: config.get<string>('DB_USER'),
-        password: config.get<string>('DB_PASSWORD'),
-        database: config.get<string>('DB_NAME'),
+        ...buildDatabaseOptions((key) => config.get<string>(key)),
         autoLoadEntities: true,
-        // Solo desarrollo: crea/actualiza las tablas a partir de las entidades
-        synchronize: config.get<string>('NODE_ENV') !== 'production',
       }),
     }),
     UsersModule,

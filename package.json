@@ -9,6 +9,9 @@
   "scripts": {
     "build": "nest build",
     "deploy": "nest deploy",
+    "migration:generate": "npm run build && typeorm migration:generate -d dist/database/data-source.js",
+    "migration:run": "npm run build && typeorm migration:run -d dist/database/data-source.js",
+    "migration:revert": "npm run build && typeorm migration:revert -d dist/database/data-source.js",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
