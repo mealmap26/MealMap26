@@ -1,9 +1,15 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { MacrosResponseDto } from './dto/macros-response.dto.js';
 import { UpdateMacrosDto } from './dto/update-macros.dto.js';
+import { UserResponseDto } from './dto/user-response.dto.js';
 import { User } from './entities/user.entity.js';
+import { Role } from './enums/role.enum.js';
 
 @Injectable()
 export class UsersService {
@@ -38,7 +44,10 @@ export class UsersService {
   }
 
   // Actualiza solo las metas enviadas y devuelve las cuatro metas resultantes
-  async updateMacros(id: string, dto: UpdateMacrosDto): Promise<MacrosResponseDto> {
+  async updateMacros(
+    id: string,
+    dto: UpdateMacrosDto,
+  ): Promise<MacrosResponseDto> {
     // El DTO puede traer las propiedades como undefined; solo se actualizan las enviadas
     const changes = Object.fromEntries(
       Object.entries(dto).filter(([, value]) => value !== undefined),
@@ -55,6 +64,31 @@ export class UsersService {
     };
   }
 
+  async findAll(): Promise<UserResponseDto[]> {
+    const users = await this.usersRepository.find({
+      order: { createdAt: 'ASC', email: 'ASC' },
+    });
+    return users.map(toUserResponse);
+  }
+
+  async changeRole(
+    adminId: string,
+    id: string,
+    role: Role,
+  ): Promise<UserResponseDto> {
+    // Si el admin pudiera quitarse el rol, el sistema podría quedarse sin administradores
+    if (id === adminId) {
+      throw new BadRequestException('No puedes cambiar tu propio rol');
+    }
+    const user = await this.usersRepository.findOneBy({ id });
+    if (!user) throw new NotFoundException('Usuario no encontrado');
+
+    if (user.role !== role) {
+      await this.usersRepository.update(id, { role });
+    }
+    return toUserResponse({ ...user, role });
+  }
+
   findByEmail(email: string): Promise<User | null> {
     return this.usersRepository.findOneBy({ email });
   }
@@ -66,4 +100,15 @@ export class UsersService {
   create(data: Pick<User, 'email' | 'password'>): Promise<User> {
     return this.usersRepository.save(this.usersRepository.create(data));
   }
+}
+
+// Arma la respuesta campo por campo para no exponer password, twoFASecret ni las metas
+function toUserResponse(user: User): UserResponseDto {
+  return {
+    id: user.id,
+    email: user.email,
+    role: user.role,
+    twoFAEnabled: user.twoFAEnabled,
+    createdAt: user.createdAt,
+  };
 }
