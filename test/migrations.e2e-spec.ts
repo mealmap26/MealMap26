@@ -84,7 +84,10 @@ describe('Migraciones (e2e)', () => {
   });
 
   it('se pueden revertir: la base vuelve a quedar sin tablas', async () => {
-    await dataSource.undoLastMigration();
+    // Se revierten una por una, de la última a la primera
+    for (let i = 0; i < MIGRATIONS.length; i++) {
+      await dataSource.undoLastMigration();
+    }
 
     expect(await tables()).toEqual([]);
   });

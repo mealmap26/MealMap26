@@ -20,4 +20,14 @@ export class Ingredient {
 
   @Column({ type: 'numeric', precision: 7, scale: 2, transformer: decimalTransformer })
   fatPer100g: number;
+
+  // Peso aproximado de una unidad (g); necesario para recetas que usan 'unidad'
+  @Column({
+    type: 'numeric',
+    precision: 7,
+    scale: 2,
+    nullable: true,
+    transformer: decimalTransformer,
+  })
+  gramsPerUnit: number | null;
 }
