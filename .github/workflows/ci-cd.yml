@@ -1,0 +1,81 @@
+name: CI/CD
+
+# CI: en cada push y en cada pull request se ejecutan lint, build y todas las pruebas
+# (unitarias + integración) con un mínimo de 80 % de cobertura.
+# CD: solo si las pruebas pasan y el push es a main, se despliega a Render.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# Si llega un push nuevo a la misma rama, se cancela la ejecución anterior
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Pruebas
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # Base de datos real para las pruebas de integración (Supertest).
+    # Usuario y contraseña coinciden con los valores por defecto de test/support/env.ts
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: mealmap
+          POSTGRES_PASSWORD: mealmap_dev
+          POSTGRES_DB: mealmap
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mealmap"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      # Falla si la cobertura combinada queda por debajo del 80 % (ver vitest.config.coverage.ts)
+      - name: Pruebas unitarias y de integración con cobertura
+        run: npm run test:ci
+
+  deploy:
+    name: Despliegue a Render
+    # Solo después de que las pruebas pasen, y solo en pushes a main (no en pull requests)
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Llamar al deploy hook de Render
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then
+            echo "::warning::Falta el secreto RENDER_DEPLOY_HOOK_URL: se omite el despliegue."
+            exit 0
+          fi
+          curl --fail --silent --show-error -X POST "$RENDER_DEPLOY_HOOK_URL"
+          echo "Despliegue solicitado a Render."
