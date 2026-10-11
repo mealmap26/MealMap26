@@ -1,0 +1,42 @@
+# Blueprint de Render: crea la base de datos PostgreSQL y el servicio web de la API.
+# Guía paso a paso: docs/DESPLIEGUE.md
+databases:
+  - name: mealmap-db
+    plan: free
+    databaseName: mealmap
+    user: mealmap
+
+services:
+  - type: web
+    name: mealmap-api
+    runtime: node
+    plan: free
+    # @nestjs/cli y typescript son dependencias de desarrollo: hay que instalarlas para compilar
+    buildCommand: npm ci --include=dev && npm run build
+    # Al arrancar en producción, la app ejecuta las migraciones y crea las tablas
+    startCommand: npm run start:prod
+    # Swagger UI responde 200 sin autenticación
+    healthCheckPath: /api
+    # Los despliegues los dispara el pipeline de GitHub Actions (job "deploy") con el deploy hook,
+    # solo después de que las pruebas pasen. Ver docs/DESPLIEGUE.md.
+    autoDeployTrigger: off
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mealmap-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN_SECONDS
+        value: "3600"
+      # Render pide estos valores al crear el Blueprint (no se guardan en el repo)
+      - key: SEED_KEY
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
