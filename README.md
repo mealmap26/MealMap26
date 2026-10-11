@@ -37,11 +37,11 @@ No es un meal prep estricto: no le dice al usuario que prepare todo el domingo. 
 | `POST /seed` con datos iniciales | Persona 1 | Listo |
 | Swagger en `/api` | Persona 1 | Listo |
 | Pruebas de Auth (unitarias, integración y Postman) | Persona 1 | Listo |
-| Catálogo (recetas, ingredientes, categorías) | Persona 2 | Pendiente |
-| Módulo Nevera (`/fridge`) | Persona 2 | Pendiente |
-| GitHub Actions (CI) | Persona 2 | Pendiente |
-| Módulo Meal Prep (macros, plan semanal, lista de compras) | Persona 3 | Pendiente |
-| Despliegue (Railway o Render) | Persona 3 | Pendiente |
+| Catálogo (recetas, ingredientes, categorías) | Persona 2 | Listo |
+| Módulo Nevera (`/fridge`) | Persona 2 | Listo |
+| GitHub Actions (CI) | Persona 3 (pipeline base) y Persona 2 (Newman, todas las ramas, hook `pre-push`) | Listo |
+| Módulo Meal Prep (macros, plan semanal, lista de compras) | Persona 3 | Listo |
+| Despliegue en Render (Blueprint + deploy hook) | Persona 3 | Listo |
 
 ## Módulos
 
@@ -69,8 +69,8 @@ El usuario configura sus macros objetivo (por ejemplo, 2000 kcal/día y 150 g de
 - Autenticación con JWT (`@nestjs/jwt`) y 2FA con TOTP (`otplib` + `qrcode`)
 - Documentación con Swagger (`@nestjs/swagger`)
 - Pruebas con Vitest (unitarias), Supertest (integración) y Postman
-- CI/CD con GitHub Actions
-- Despliegue en Railway o Render
+- CI/CD con GitHub Actions (pruebas, Postman con Newman y despliegue)
+- Despliegue en Render
 
 > El proyecto usa **Vitest** en lugar de Jest: es el runner que trae por defecto la versión actual de Nest, y es compatible con la sintaxis de Jest (`describe`, `it`, `expect`).
 
@@ -113,7 +113,7 @@ Las tablas se crean solas al arrancar (`synchronize` está activo mientras `NODE
 
 ### Cargar los datos iniciales
 
-`POST /seed` crea 5 categorías, 30 ingredientes, 14 recetas (con sus ingredientes y macros por porción calculados) y el usuario administrador. Es **idempotente**: puedes llamarlo varias veces sin duplicar nada ni pisar cambios.
+`POST /seed` crea 5 categorías, 77 ingredientes, 81 recetas (con sus ingredientes y macros por porción calculados) y el usuario administrador. Es **idempotente**: puedes llamarlo varias veces sin duplicar nada ni pisar cambios.
 
 ```bash
 curl -X POST http://localhost:3000/seed -H "x-seed-key: <el valor de SEED_KEY en tu .env>"
@@ -128,7 +128,9 @@ Se definen en `.env` (no se sube a git). `.env.example` es la plantilla: **si ag
 | Variable | Descripción |
 |---|---|
 | `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | Conexión a PostgreSQL. Docker Compose usa los mismos valores para crear la base. |
-| `NODE_ENV` | `development` o `production`. En `production` se desactiva `synchronize`. |
+| `DATABASE_URL` | Opcional. Si existe (Render la entrega), se usa en lugar de las variables `DB_*`. |
+| `DB_SSL` | `true` para conectarse con SSL (por ejemplo, a la base de Render desde fuera de su red). |
+| `NODE_ENV` | `development` o `production`. En `production` se desactiva `synchronize` y se ejecutan las migraciones al arrancar. |
 | `JWT_SECRET` | Secreto con el que se firman los tokens. Usa uno largo y aleatorio. **La app no arranca sin él.** |
 | `JWT_EXPIRES_IN_SECONDS` | Duración del token (por defecto 3600). |
 | `SEED_KEY` | Llave que debe enviarse en el header `x-seed-key` para usar `POST /seed`. Si no está definida, el seed queda deshabilitado. |
@@ -145,7 +147,16 @@ Se definen en `.env` (no se sube a git). `.env.example` es la plantilla: **si ag
 | `npm test` | Pruebas unitarias (mocks, no requieren base de datos) |
 | `npm run test:e2e` | Pruebas de integración con Supertest (requieren `docker compose up -d`) |
 | `npm run test:cov` | Pruebas unitarias con reporte de cobertura |
+| `npm run test:ci` | Unitarias + integración con cobertura; falla si queda por debajo del 80 % (es lo que corre el CI) |
 | `npm run lint` | Linter (oxlint) |
+| `npm run migration:run` | Compila y ejecuta las migraciones pendientes (en producción se ejecutan solas al arrancar) |
+| `npm run prepare` | Activa los hooks de git del repositorio (`.githooks/`). Se ejecuta solo con `npm install` |
+
+### Hook `pre-push`
+
+`npm install` configura git para usar la carpeta versionada `.githooks/` (`git config core.hooksPath .githooks`). Desde ese momento, cada `git push` ejecuta antes `npm run lint`, `npm run build` y `npm test`; si alguno falla, el push se cancela. Las pruebas de integración no se corren ahí porque necesitan Docker: de esas se encarga GitHub Actions.
+
+Para comprobar que quedó activo: `git config core.hooksPath` debe mostrar `.githooks`. Solo en una emergencia puedes saltarte la verificación con `git push --no-verify`.
 
 ## Estructura del proyecto
 
@@ -153,18 +164,23 @@ Se definen en `.env` (no se sube a git). `.env.example` es la plantilla: **si ag
 src/
 ├── auth/            Registro, login, logout, 2FA, guards (JwtAuthGuard, RolesGuard), decoradores
 ├── users/           Entidad User, UsersService, enum Role
-├── categories/      Entidad Category
-├── ingredients/     Entidad Ingredient
-├── recipes/         Entidades Recipe y RecipeIngredient, enum Unit
-├── fridge/          Entidad UserIngredient (nevera del usuario)
-├── meal-plan/       Entidades MealPlan y MealPlanEntry, enum MealType
+├── categories/      CRUD de categorías
+├── ingredients/     CRUD de ingredientes (recalcula las recetas al editar sus macros)
+├── recipes/         CRUD de recetas, cálculo de macros por porción, enum Unit
+├── fridge/          Nevera del usuario y sugerencias de recetas
+├── meal-plan/       Plan semanal y lista de compras, enum MealType
 ├── seed/            POST /seed y sus datos iniciales
+├── database/        Configuración de TypeORM y data source de las migraciones
+├── migrations/      Migraciones (se ejecutan solas en producción)
 ├── common/          Código compartido (transformer de decimales)
 ├── app.module.ts    Módulo raíz
 ├── app.setup.ts     Configuración compartida de la app (pipes de validación)
 └── main.ts          Arranque y configuración de Swagger
 test/                Pruebas de integración y utilidades (test/support)
 postman/             Colección y entorno de Postman
+docs/                Guía de despliegue en Render
+.githooks/           Hook pre-push versionado
+.github/workflows/   Pipeline de CI/CD
 ```
 
 ## Endpoints
@@ -187,30 +203,55 @@ La documentación interactiva está en `http://localhost:3000/api` (Swagger). El
 |---|---|---|---|
 | POST | `/seed` | Header `x-seed-key` | Carga categorías, ingredientes, recetas y el usuario admin |
 
-### Catálogo — solo ADMIN (pendiente, Persona 2)
+### Catálogo
+
+Todas las rutas piden token. **Leer** (`GET`) está disponible para cualquier usuario autenticado (el `USER` necesita los ids de los ingredientes para llenar su nevera); **crear, editar y borrar** solo para `ADMIN` (un `USER` recibe 403).
+
+| Método | Ruta | Acceso | Descripción |
+|---|---|---|---|
+| GET | `/categories` | Token | Listar categorías, ordenadas por nombre |
+| GET | `/categories/:id` | Token | Ver una categoría |
+| POST | `/categories` | ADMIN | Crear categoría (`{ "name" }`, 2 a 60 caracteres) |
+| PATCH | `/categories/:id` | ADMIN | Renombrar categoría |
+| DELETE | `/categories/:id` | ADMIN | Eliminar categoría (409 si tiene recetas) |
+| GET | `/ingredients` | Token | Listar ingredientes, ordenados por nombre. `?search=pollo` filtra por nombre |
+| GET | `/ingredients/:id` | Token | Ver un ingrediente |
+| POST | `/ingredients` | ADMIN | Crear ingrediente (`name`, `caloriesPer100g`, `proteinPer100g`, `carbsPer100g`, `fatPer100g` y, opcional, `gramsPerUnit`) |
+| PATCH | `/ingredients/:id` | ADMIN | Editar ingrediente (parcial). Si cambian sus macros o `gramsPerUnit`, recalcula las recetas que lo usan |
+| DELETE | `/ingredients/:id` | ADMIN | Eliminar ingrediente (409 si alguna receta lo usa; de las neveras se quita solo) |
+| GET | `/recipes` | Token | Listar recetas, ordenadas por nombre. Filtros opcionales y combinables: `categoryId`, `search`, `maxPrepTime`, `maxCalories`, `minProtein` |
+| GET | `/recipes/:id` | Token | Ver una receta con su categoría y sus ingredientes (cantidades para la receta completa) |
+| POST | `/recipes` | ADMIN | Crear receta (`name`, `description`, `prepTimeMinutes`, `servingSize`, `categoryId`, `ingredients: [{ ingredientId, quantity, unit }]`) |
+| PATCH | `/recipes/:id` | ADMIN | Editar receta (parcial). Si se envía `ingredients`, reemplaza todas las líneas |
+| DELETE | `/recipes/:id` | ADMIN | Eliminar receta y sus líneas (409 si está en algún plan semanal) |
+
+Reglas del catálogo:
+
+- Los nombres son únicos sin distinguir mayúsculas ("Snack" y "snack" chocan): un nombre repetido responde 409. Se guardan sin espacios al inicio ni al final.
+- **Los macros de las recetas los calcula el servidor**; si se envían `calories`, `protein`, `carbs` o `fat` la petición se rechaza con 400. Se suman los valores por 100 g de cada ingrediente (`ml` se toma como `g` y `unidad` se convierte con `gramsPerUnit`) y se dividen entre `servingSize`, redondeando a 2 decimales. Se recalculan al cambiar los ingredientes o las porciones de la receta, y al editar los macros o `gramsPerUnit` de un ingrediente.
+- Una línea en `unidad` exige que el ingrediente tenga `gramsPerUnit` (si no, 400). Tampoco se le puede quitar `gramsPerUnit` a un ingrediente que alguna receta usa en `unidad`.
+- Si la categoría o algún ingrediente de la receta no existe, responde 404 y el mensaje dice cuáles.
+- Enviar `null` en un campo obligatorio al editar responde 400 (solo `description` y `gramsPerUnit` admiten `null`).
+
+### Nevera — Módulo 1
+
+Solo para usuarios con rol `USER` (el `ADMIN` recibe 403). Cada usuario ve únicamente su propia nevera.
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| GET | `/recipes` | Listar recetas (con filtros opcionales) |
-| POST | `/recipes` | Crear receta |
-| PATCH | `/recipes/:id` | Editar receta |
-| DELETE | `/recipes/:id` | Eliminar receta |
-| GET | `/ingredients` | Listar ingredientes |
-| POST | `/ingredients` | Crear ingrediente |
-| PATCH | `/ingredients/:id` | Editar ingrediente |
-| GET | `/categories` | Listar categorías |
-| POST | `/categories` | Crear categoría |
-
-### Nevera — Módulo 1 (pendiente, Persona 2)
-
-| Método | Ruta | Descripción |
-|---|---|---|
-| GET | `/fridge` | Ver los ingredientes del usuario |
-| POST | `/fridge` | Agregar un ingrediente a la nevera |
-| DELETE | `/fridge/:ingredientId` | Quitar un ingrediente de la nevera |
+| GET | `/fridge` | Ver los ingredientes del usuario: `[{ ingredientId, name }]`, ordenados por nombre |
+| POST | `/fridge` | Agregar un ingrediente: `{ "ingredientId": "<uuid>" }`. 404 si no existe, 409 si ya está en la nevera |
+| DELETE | `/fridge/:ingredientId` | Quitar un ingrediente (204). 404 si no está en la nevera |
 | GET | `/fridge/suggestions` | Recetas sugeridas con lo que hay en la nevera |
 
-### Meal prep — Módulo 2 (pendiente, Persona 3)
+Cómo funcionan las sugerencias:
+
+- Se comparan los ingredientes de cada receta con los de la nevera (sin cantidades).
+- Por defecto solo salen las recetas que se pueden preparar completas. Con `?maxMissing=N` (entero de 0 a 5) también salen las que tienen hasta N ingredientes faltantes.
+- Cada sugerencia trae `recipe` (id, nombre, tiempo, macros por porción y categoría), `matchedIngredients`, `totalIngredients`, `missingIngredients` (`[{ id, name }]`) y `canPrepare` (`true` si no falta nada).
+- Solo se incluyen recetas que usan al menos un ingrediente de la nevera. Se ordenan por menos faltantes, mayor proporción de coincidencia y nombre. Con la nevera vacía la lista es vacía.
+
+### Meal prep — Módulo 2
 
 | Método | Ruta | Descripción |
 |---|---|---|
@@ -243,7 +284,7 @@ Todos los IDs son UUID.
 |---|---|
 | `users` | `id`, `email` (único), `password` (hash), `role` (`ADMIN` \| `USER`), `twoFASecret`, `twoFAEnabled`, `dailyCalories`, `dailyProtein`, `dailyCarbs`, `dailyFat`, `createdAt` |
 | `recipes` | `id`, `name`, `description`, `prepTimeMinutes`, `calories`, `protein`, `carbs`, `fat`, `servingSize`, `categoryId`, `createdAt` |
-| `ingredients` | `id`, `name` (único), `caloriesPer100g`, `proteinPer100g`, `carbsPer100g`, `fatPer100g` |
+| `ingredients` | `id`, `name` (único), `caloriesPer100g`, `proteinPer100g`, `carbsPer100g`, `fatPer100g`, `gramsPerUnit` (peso de una unidad en g; `null` si no aplica) |
 | `recipe_ingredients` | `id`, `recipeId`, `ingredientId`, `quantity`, `unit` (`g` \| `ml` \| `unidad`) |
 | `categories` | `id`, `name` (único). Ej.: "Alto en proteína", "Vegetariano", "Rápido", "Desayuno", "Snack" |
 | `user_ingredients` | `id`, `userId`, `ingredientId` (la nevera del usuario) |
@@ -253,9 +294,9 @@ Todos los IDs son UUID.
 
 Puntos a tener en cuenta al construir sobre este modelo:
 
-- **Macros de `recipes`** (`calories`, `protein`, `carbs`, `fat`): son **por porción**. `servingSize` es el número de porciones que rinde la receta completa.
-- **`recipe_ingredients.quantity`**: es para la **receta completa**. La unidad puede ser `g`, `ml` o `unidad` (en el seed, solo el huevo va en `unidad`). Al sumar para la lista de compras, no mezcles unidades distintas del mismo ingrediente.
-- **Borrados:** no se puede borrar una categoría con recetas, un ingrediente usado en una receta ni una receta usada en un plan (`RESTRICT`). Borrar una receta borra sus líneas de ingredientes, y borrar un usuario borra su nevera y sus planes (`CASCADE`).
+- **Macros de `recipes`** (`calories`, `protein`, `carbs`, `fat`): son **por porción** y **los calcula el servidor** a partir de los ingredientes. `servingSize` es el número de porciones que rinde la receta completa. Al editar los macros (o `gramsPerUnit`) de un ingrediente, se recalculan las recetas que lo usan.
+- **`recipe_ingredients.quantity`**: es para la **receta completa**. La unidad puede ser `g`, `ml` o `unidad`; `unidad` solo se permite si el ingrediente tiene `gramsPerUnit`. Al sumar para la lista de compras, no mezcles unidades distintas del mismo ingrediente.
+- **Borrados:** no se puede borrar una categoría con recetas, un ingrediente usado en una receta ni una receta usada en un plan (`RESTRICT`); la API responde 409 con un mensaje que lo explica. Borrar una receta borra sus líneas de ingredientes, borrar un ingrediente lo quita de las neveras, y borrar un usuario borra su nevera y sus planes (`CASCADE`).
 - **Unicidad:** un ingrediente no se repite dentro de la misma receta ni de la misma nevera, y hay un único plan por usuario y semana (`userId` + `weekStartDate`).
 - Las macros del usuario son `null` hasta que las configure.
 
@@ -265,17 +306,17 @@ El proyecto exige **cobertura mínima de 80%**. Hay tres niveles de pruebas.
 
 | Nivel | Comando | Requiere | Qué cubre |
 |---|---|---|---|
-| Unitarias (Vitest) | `npm test` | Nada (usa mocks) | Servicios de Auth y 2FA, `RolesGuard`, `JwtStrategy` |
-| Integración (Supertest) | `npm run test:e2e` | `docker compose up -d` | Registro, login, logout, 2FA, roles y seed con HTTP real y base de datos real |
-| Postman | Ver la sección siguiente | La API corriendo | Flujo completo de Auth, 2FA, logout y seed |
+| Unitarias (Vitest) | `npm test` | Nada (usa mocks) | Servicios de Auth y 2FA, `RolesGuard`, `JwtStrategy`, configuración de la base, servicios de categorías, ingredientes, recetas, nevera, usuarios y plan semanal, y la lógica pura: cálculo de macros por porción, sugerencias de la nevera, generador del plan, lista de compras y semanas |
+| Integración (Supertest) | `npm run test:e2e` | `docker compose up -d` | Con HTTP real y base de datos real: Auth, 2FA, roles, seed, migraciones, CRUD del catálogo (permisos, validaciones, 404/409, macros y recálculo), nevera y sugerencias, plan semanal, lista de compras y metas de macros |
+| Postman | Ver la sección siguiente | La API corriendo | Seed, Auth, 2FA, logout, catálogo y nevera, de punta a punta |
 
-Las pruebas de integración usan una base **separada**, `mealmap_test`, que se crea sola y se borra y recrea en cada archivo de prueba. **Nunca tocan tu base de desarrollo.** Con unitarias e integración juntas, el código de `src/` queda cubierto en torno al 98% de sentencias y líneas.
+Las pruebas de integración usan una base **separada**, `mealmap_test`, que se crea sola y se borra y recrea en cada archivo de prueba. **Nunca tocan tu base de desarrollo.** Con unitarias e integración juntas (`npm run test:ci`), el código de `src/` queda por encima del 99 % de sentencias y líneas; el mínimo exigido es 80 %.
 
 ## Pruebas con Postman
 
 En la carpeta `postman/` hay una colección lista para importar, con pruebas automáticas (aserciones) en cada petición:
 
-- `MealMap.postman_collection.json` — la colección (20 peticiones, 32 verificaciones).
+- `MealMap.postman_collection.json` — la colección (84 peticiones, 135 verificaciones).
 - `MealMap.postman_environment.json` — el entorno "MealMap - Local" con las variables.
 
 ### Cómo usarla
@@ -300,19 +341,24 @@ En la carpeta `postman/` hay una colección lista para importar, con pruebas aut
 | 1. Auth - registro y login | Registro (rol `USER`, sin contraseña en la respuesta), email repetido (409), contraseña corta (400), intento de asignarse `ADMIN` (400), login correcto e incorrecto (401), login del admin del seed (el token trae rol `ADMIN`) |
 | 2. Auth - 2FA | `enable` sin token (401), generación del QR, código incorrecto (400), activación con código correcto, `enable` repetido (409), login sin código (401), con código incorrecto (401) y con código correcto (200) |
 | 3. Auth - logout | Logout sin token (401), logout correcto (204) y reutilización del token cerrado (401, "Sesión cerrada") |
+| 4. Catálogo - categorías | Login del admin y de un usuario nuevo (guarda los dos tokens), lectura sin token (401) y como `USER` (200, ordenadas), crear como `USER` (403), crear como `ADMIN` (201, quita los espacios), nombre repetido en minúsculas (409), nombre corto (400), ver por id (200, 404 y 400 con un id que no es UUID), renombrar (200) y renombrar como `USER` (403) |
+| 5. Catálogo - ingredientes | Búsqueda `?search=pollo`, crear como `USER` (403), crear los ingredientes A (por gramos) y B (con `gramsPerUnit`), nombre repetido (409), valores fuera de rango (400), ver por id (200 y 404), editar como `USER` (403) y `null` en un campo obligatorio (400) |
+| 6. Catálogo - recetas | Filtro `maxPrepTime` (200 y 400 si no es número), crear como `USER` (403), enviar macros a mano (400), `unidad` sin `gramsPerUnit` (400), ingrediente inexistente (404), crear como `ADMIN` con los **macros calculados por el servidor** (350 kcal por porción), nombre repetido (409), filtro por categoría, detalle, 404, **editar las calorías de A recalcula la receta** (350 → 500 kcal), cambiar porciones (500 → 250 kcal) y borrar la categoría o el ingrediente en uso (409) |
+| 7. Nevera | Sin token (401), como `ADMIN` (403), nevera y sugerencias vacías, agregar A (201), repetido (409), inexistente (404), id inválido (400), sugerencias con `maxMissing=1` (falta B), sin `maxMissing` (no aparece), agregar B, ver la nevera, sugerencias con `canPrepare: true`, `maxMissing` fuera de rango (400), quitar B (204) y quitarlo otra vez (404) |
+| 8. Limpieza | Borrar la receta como `USER` (403) y como `ADMIN` (204), los ingredientes A y B (A sale también de la nevera) y la categoría, para no dejar datos de prueba |
 
 Notas:
 
-- Cada ejecución registra un usuario con un email único (`postman-<fecha>@example.com`), así que puedes repetir la colección sin limpiar la base.
+- Cada ejecución registra usuarios con emails únicos (`postman-<fecha>@example.com` y `postman-nevera-<fecha>@example.com`) y crea la categoría, los ingredientes y la receta con nombres únicos; la carpeta 8 los borra al final. Puedes repetir la colección sin limpiar la base.
 - El código TOTP del 2FA lo calcula un script de la propia colección a partir del secreto que devuelve `/auth/2fa/enable`, igual que lo haría Google Authenticator. No necesitas el celular.
 - Si el seed ya se cargó antes, la primera petición también responde 201 (es idempotente).
 
 ### Ejecutarla desde la terminal (opcional)
 
-Con [Newman](https://github.com/postmanlabs/newman), el ejecutor de Postman en consola:
+Con [Newman](https://github.com/postmanlabs/newman), el ejecutor de Postman en consola (es lo mismo que hace el job *Pruebas de Postman (Newman)* del CI):
 
 ```bash
-npx newman run postman/MealMap.postman_collection.json \
+npx --yes newman@6 run postman/MealMap.postman_collection.json \
   -e postman/MealMap.postman_environment.json \
   --env-var seedKey=<tu SEED_KEY> \
   --env-var adminEmail=<tu ADMIN_EMAIL> \
@@ -321,16 +367,16 @@ npx newman run postman/MealMap.postman_collection.json \
 
 ### Probar los endpoints nuevos
 
-Al agregar endpoints (catálogo, nevera, meal prep), puedes:
+Al agregar endpoints nuevos, puedes:
 
 - **Importarlos de golpe:** en Postman, **Import** → pega `http://localhost:3000/api-json`. Postman genera una petición por cada ruta de Swagger.
-- **Sumarlos a la colección del equipo:** agrega una carpeta nueva en `postman/MealMap.postman_collection.json` con sus aserciones (por ejemplo "4. Catálogo") y expórtala de nuevo desde Postman.
+- **Sumarlos a la colección del equipo:** agrega una carpeta nueva en `postman/MealMap.postman_collection.json` con sus aserciones (siguiendo la numeración, por ejemplo "9. Meal prep") y expórtala de nuevo desde Postman. El CI la ejecuta en cada push.
 
 ## Guía para agregar tu módulo
 
 Cada módulo de dominio ya existe con su entidad registrada (`TypeOrmModule.forFeature`) y exporta `TypeOrmModule`. Tú agregas controlador, servicio y DTOs dentro de tu carpeta.
 
-- **Persona 2:** `categories/`, `ingredients/`, `recipes/` (CRUD del catálogo, solo ADMIN) y `fridge/`.
+- **Persona 2:** `categories/`, `ingredients/`, `recipes/` (CRUD del catálogo: lectura para cualquier usuario autenticado, escritura solo ADMIN) y `fridge/`.
 - **Persona 3:** `meal-plan/` y el endpoint de macros del usuario.
 
 Convenciones:
@@ -370,8 +416,25 @@ No necesitas importar `AuthModule` en tu módulo para usar estos guards: basta c
 
 ## CI/CD y despliegue
 
-Pendientes, a cargo de Persona 2 (CI) y Persona 3 (despliegue):
+### Pipeline de GitHub Actions
 
-- **GitHub Actions (Persona 2):** ejecutar lint, build, `npm test` y `npm run test:e2e` en cada push. Para las pruebas de integración el workflow necesita un servicio de PostgreSQL; `test/support/env.ts` ya trae valores por defecto para entornos sin `.env` y crea la base `mealmap_test` automáticamente.
-- **Despliegue en Railway o Render (Persona 3):** definir en la plataforma las variables de entorno de la tabla anterior, con `NODE_ENV=production` (desactiva `synchronize`), un `JWT_SECRET` largo y aleatorio, y un `SEED_KEY` y `ADMIN_PASSWORD` propios. Después, llamar una vez a `POST /seed`.
-- Antes de producción conviene también: una limpieza periódica de `revoked_tokens` (los tokens vencidos ya no hacen falta) y cifrar `twoFASecret` en la base.
+El workflow [`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml) (`CI/CD`) corre en **cada push a cualquier rama** y en cada pull request. Para no ejecutar todo dos veces, un pull request desde una rama de este mismo repositorio se apoya en la ejecución del push de esa rama; solo los que vienen de un fork corren su propia ejecución. Si llega un push nuevo a la misma rama, se cancela la ejecución anterior.
+
+| Job | Cuándo | Qué hace |
+|---|---|---|
+| Pruebas | Siempre | `npm ci`, `npm run lint`, `npm run build` y `npm run test:ci` (unitarias + integración contra un PostgreSQL 16 de servicio). Falla si la cobertura queda por debajo del 80 % |
+| Pruebas de Postman (Newman) | Si pasan las pruebas | Levanta un PostgreSQL vacío, compila y arranca la API (`node dist/main` con `NODE_ENV=development`, así `synchronize` crea las tablas) con credenciales de prueba que solo existen en ese job, espera a que responda `/api-json` y corre la colección completa con `newman@6` |
+| Despliegue a Render | Si pasan los dos anteriores y el push es a `main` | Llama al deploy hook de Render (secreto `RENDER_DEPLOY_HOOK_URL`). Si el secreto no existe, muestra una advertencia y no despliega |
+
+Antes del push, el hook local `pre-push` (ver [Scripts](#scripts)) corre lint, build y las pruebas unitarias.
+
+### Despliegue en Render
+
+[`render.yaml`](render.yaml) (Blueprint) crea la base PostgreSQL `mealmap-db` y el servicio `mealmap-api`. En producción la app usa `DATABASE_URL`, no usa `synchronize` y ejecuta las migraciones al arrancar. La guía paso a paso (cuenta, Blueprint, variables, deploy hook y problemas comunes) está en [`docs/DESPLIEGUE.md`](docs/DESPLIEGUE.md).
+
+Después del primer despliegue hay que llamar una vez a `POST /seed` con la `SEED_KEY` del servicio.
+
+### Pendiente antes de un uso real
+
+- Una limpieza periódica de `revoked_tokens` (los tokens vencidos ya no hacen falta).
+- Cifrar `twoFASecret` en la base.
