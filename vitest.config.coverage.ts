@@ -18,7 +18,8 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
-      exclude: ['src/**/*.spec.ts', 'src/main.ts'],
+      // data-source.ts es solo el punto de entrada del CLI de migraciones, no lo carga la app
+      exclude: ['src/**/*.spec.ts', 'src/main.ts', 'src/database/data-source.ts'],
       reporter: ['text', 'text-summary'],
       // Si la cobertura baja de estos valores, la corrida falla (y por tanto el pipeline)
       thresholds: { lines: 80, statements: 80, functions: 80, branches: 80 },
