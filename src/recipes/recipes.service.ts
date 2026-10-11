@@ -12,11 +12,16 @@ import {
   In,
   LessThanOrEqual,
   MoreThanOrEqual,
-  QueryFailedError,
-  Raw,
   Repository,
 } from 'typeorm';
 import { Category } from '../categories/entities/category.entity.js';
+import { escapeLike } from '../common/database/escape-like.js';
+import {
+  conflictOnUniqueViolation,
+  isPgError,
+  PG_FOREIGN_KEY_VIOLATION,
+} from '../common/database/pg-errors.js';
+import { ensureNameIsFree } from '../common/database/unique-name.js';
 import { Ingredient } from '../ingredients/entities/ingredient.entity.js';
 import { MealPlanEntry } from '../meal-plan/entities/meal-plan-entry.entity.js';
 import { CreateRecipeDto } from './dto/create-recipe.dto.js';
@@ -36,13 +41,9 @@ import {
   MissingGramsPerUnitError,
 } from './recipe-macros.js';
 
-// Código de PostgreSQL para "viola una llave foránea"
-const FOREIGN_KEY_VIOLATION = '23503';
 const IN_USE_BY_A_PLAN =
   'No se puede eliminar la receta porque está asignada en algún plan semanal';
-
-// Escapa los comodines de LIKE para buscar el texto tal cual
-const escapeLike = (text: string) => text.replace(/[\\%_]/g, '\\$&');
+const NAME_TAKEN = 'Ya existe una receta con ese nombre';
 
 @Injectable()
 export class RecipesService {
@@ -106,39 +107,49 @@ export class RecipesService {
 
   // Crea la receta y sus líneas en una sola transacción; los macros se calculan aquí
   async create(dto: CreateRecipeDto): Promise<RecipeDetailResponse> {
-    await this.ensureNameIsFree(dto.name);
+    await ensureNameIsFree(this.recipes, dto.name, NAME_TAKEN);
     await this.ensureCategoryExists(dto.categoryId);
     const macros = this.computeMacros(
-      dto.ingredients,
-      await this.findIngredients(dto.ingredients),
+      await this.toMacroLines(dto.ingredients),
       dto.servingSize,
     );
 
-    const recipeId = await this.recipes.manager.transaction(async (manager) => {
-      const recipe = await manager.save(
-        manager.create(Recipe, {
-          name: dto.name,
-          description: dto.description ?? null,
-          prepTimeMinutes: dto.prepTimeMinutes,
-          servingSize: dto.servingSize,
-          categoryId: dto.categoryId,
-          ...macros,
+    const recipeId = await conflictOnUniqueViolation(
+      () =>
+        this.recipes.manager.transaction(async (manager) => {
+          const recipe = await manager.save(
+            manager.create(Recipe, {
+              name: dto.name,
+              description: dto.description ?? null,
+              prepTimeMinutes: dto.prepTimeMinutes,
+              servingSize: dto.servingSize,
+              categoryId: dto.categoryId,
+              ...macros,
+            }),
+          );
+          await manager.save(
+            this.buildLines(manager, recipe.id, dto.ingredients),
+          );
+          return recipe.id;
         }),
-      );
-      await manager.save(this.buildLines(manager, recipe.id, dto.ingredients));
-      return recipe.id;
-    });
+      NAME_TAKEN,
+    );
 
     return this.findOne(recipeId);
   }
 
   // Si llegan `ingredients` se reemplazan todas las líneas. Los macros se recalculan
   // cuando cambian los ingredientes o las porciones.
-  async update(id: string, dto: UpdateRecipeDto): Promise<RecipeDetailResponse> {
+  async update(
+    id: string,
+    dto: UpdateRecipeDto,
+  ): Promise<RecipeDetailResponse> {
     const recipe = await this.recipes.findOneBy({ id });
     if (!recipe) throw new NotFoundException('Receta no encontrada');
 
-    if (dto.name !== undefined) await this.ensureNameIsFree(dto.name, id);
+    if (dto.name !== undefined) {
+      await ensureNameIsFree(this.recipes, dto.name, NAME_TAKEN, id);
+    }
     if (dto.categoryId !== undefined) {
       await this.ensureCategoryExists(dto.categoryId);
     }
@@ -147,8 +158,7 @@ export class RecipesService {
     let macros: Macros | undefined;
     if (dto.ingredients) {
       macros = this.computeMacros(
-        dto.ingredients,
-        await this.findIngredients(dto.ingredients),
+        await this.toMacroLines(dto.ingredients),
         servingSize,
       );
     } else if (servingSize !== recipe.servingSize) {
@@ -167,15 +177,19 @@ export class RecipesService {
       ...macros,
     };
 
-    await this.recipes.manager.transaction(async (manager) => {
-      if (newLines) {
-        await manager.delete(RecipeIngredient, { recipeId: id });
-        await manager.save(this.buildLines(manager, id, newLines));
-      }
-      if (Object.keys(changes).length > 0) {
-        await manager.update(Recipe, { id }, changes);
-      }
-    });
+    await conflictOnUniqueViolation(
+      () =>
+        this.recipes.manager.transaction(async (manager) => {
+          if (newLines) {
+            await manager.delete(RecipeIngredient, { recipeId: id });
+            await manager.save(this.buildLines(manager, id, newLines));
+          }
+          if (Object.keys(changes).length > 0) {
+            await manager.update(Recipe, { id }, changes);
+          }
+        }),
+      NAME_TAKEN,
+    );
 
     return this.findOne(id);
   }
@@ -193,11 +207,7 @@ export class RecipesService {
       await this.recipes.remove(recipe);
     } catch (error) {
       // Por si un plan la tomó entre la verificación y el borrado
-      if (
-        error instanceof QueryFailedError &&
-        (error.driverError as { code?: string } | undefined)?.code ===
-          FOREIGN_KEY_VIOLATION
-      ) {
+      if (isPgError(error, PG_FOREIGN_KEY_VIOLATION)) {
         throw new ConflictException(IN_USE_BY_A_PLAN);
       }
       throw error;
@@ -234,35 +244,35 @@ export class RecipesService {
     );
   }
 
-  // Trae los ingredientes de las líneas; si falta alguno, dice cuáles
-  private async findIngredients(
+  // Arma las líneas para el cálculo de macros con su ingrediente; si falta alguno, dice cuáles
+  private async toMacroLines(
     lines: RecipeIngredientLineDto[],
-  ): Promise<Map<string, Ingredient>> {
-    const ids = lines.map((line) => line.ingredientId);
-    const found = await this.ingredients.findBy({ id: In(ids) });
-    const byId = new Map(found.map((ingredient) => [ingredient.id, ingredient]));
+  ): Promise<MacroLine[]> {
+    const found = await this.ingredients.findBy({
+      id: In(lines.map((line) => line.ingredientId)),
+    });
+    const byId = new Map<string, Ingredient>(
+      found.map((ingredient) => [ingredient.id, ingredient]),
+    );
 
-    const missing = ids.filter((ingredientId) => !byId.has(ingredientId));
+    const macroLines: MacroLine[] = [];
+    const missing: string[] = [];
+    for (const { ingredientId, quantity, unit } of lines) {
+      const ingredient = byId.get(ingredientId);
+      if (ingredient) macroLines.push({ quantity, unit, ingredient });
+      else missing.push(ingredientId);
+    }
     if (missing.length > 0) {
       throw new NotFoundException(
         `No existen los ingredientes: ${missing.join(', ')}`,
       );
     }
-    return byId;
+    return macroLines;
   }
 
-  private computeMacros(
-    lines: RecipeIngredientLineDto[],
-    ingredients: Map<string, Ingredient>,
-    servingSize: number,
-  ): Macros {
-    const macroLines: MacroLine[] = lines.map((line) => ({
-      quantity: line.quantity,
-      unit: line.unit,
-      ingredient: ingredients.get(line.ingredientId) as Ingredient,
-    }));
+  private computeMacros(lines: MacroLine[], servingSize: number): Macros {
     try {
-      return computeMacrosPerServing(macroLines, servingSize);
+      return computeMacrosPerServing(lines, servingSize);
     } catch (error) {
       if (error instanceof MissingGramsPerUnitError) {
         throw new BadRequestException(
@@ -276,16 +286,6 @@ export class RecipesService {
   private async ensureCategoryExists(categoryId: string) {
     if (!(await this.categories.existsBy({ id: categoryId }))) {
       throw new NotFoundException(`No existe la categoría ${categoryId}`);
-    }
-  }
-
-  // El nombre es único sin distinguir mayúsculas
-  private async ensureNameIsFree(name: string, excludeId?: string) {
-    const existing = await this.recipes.findOneBy({
-      name: Raw((alias) => `LOWER(${alias}) = LOWER(:name)`, { name }),
-    });
-    if (existing && existing.id !== excludeId) {
-      throw new ConflictException('Ya existe una receta con ese nombre');
     }
   }
 }

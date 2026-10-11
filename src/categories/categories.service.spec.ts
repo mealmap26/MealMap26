@@ -1,6 +1,7 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { QueryFailedError } from 'typeorm';
 import { Recipe } from '../recipes/entities/recipe.entity.js';
 import { CategoriesService } from './categories.service.js';
 import { Category } from './entities/category.entity.js';
@@ -18,11 +19,20 @@ describe('CategoriesService', () => {
   const recipes = { existsBy: vi.fn() };
 
   const snack: Category = { id: 'cat-1', name: 'Snack' };
+  const uniqueViolation = () =>
+    new QueryFailedError(
+      'INSERT',
+      [],
+      Object.assign(new Error('dup'), { code: '23505' }),
+    );
 
   beforeEach(async () => {
     vi.resetAllMocks();
     categories.create.mockImplementation((data: object) => data);
-    categories.save.mockImplementation((data: object) => ({ id: 'cat-new', ...data }));
+    categories.save.mockImplementation((data: object) => ({
+      id: 'cat-new',
+      ...data,
+    }));
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -74,6 +84,24 @@ describe('CategoriesService', () => {
       );
       expect(categories.save).not.toHaveBeenCalled();
     });
+
+    it('lanza Conflict si la base rechaza el nombre repetido (peticiones simultáneas)', async () => {
+      categories.findOneBy.mockResolvedValue(null);
+      categories.save.mockRejectedValue(uniqueViolation());
+
+      await expect(service.create({ name: 'Snack' })).rejects.toThrow(
+        new ConflictException('Ya existe una categoría con ese nombre'),
+      );
+    });
+
+    it('propaga otros errores de la base', async () => {
+      categories.findOneBy.mockResolvedValue(null);
+      categories.save.mockRejectedValue(new Error('se cayó la base'));
+
+      await expect(service.create({ name: 'Snack' })).rejects.toThrow(
+        'se cayó la base',
+      );
+    });
   });
 
   describe('update', () => {
@@ -92,7 +120,9 @@ describe('CategoriesService', () => {
         .mockResolvedValueOnce({ ...snack })
         .mockResolvedValueOnce(snack);
 
-      await expect(service.update('cat-1', { name: 'SNACK' })).resolves.toMatchObject({
+      await expect(
+        service.update('cat-1', { name: 'SNACK' }),
+      ).resolves.toMatchObject({
         name: 'SNACK',
       });
     });
@@ -102,8 +132,21 @@ describe('CategoriesService', () => {
         .mockResolvedValueOnce({ ...snack })
         .mockResolvedValueOnce({ id: 'cat-2', name: 'Desayuno' });
 
-      await expect(service.update('cat-1', { name: 'desayuno' })).rejects.toThrow(
-        ConflictException,
+      await expect(
+        service.update('cat-1', { name: 'desayuno' }),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('lanza Conflict si la base rechaza el nombre repetido (peticiones simultáneas)', async () => {
+      categories.findOneBy
+        .mockResolvedValueOnce({ ...snack })
+        .mockResolvedValueOnce(null);
+      categories.save.mockRejectedValue(uniqueViolation());
+
+      await expect(
+        service.update('cat-1', { name: 'Desayuno' }),
+      ).rejects.toThrow(
+        new ConflictException('Ya existe una categoría con ese nombre'),
       );
     });
 

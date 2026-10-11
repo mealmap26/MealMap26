@@ -76,7 +76,9 @@ describe('RecipesService', () => {
     prepTimeMinutes: 20,
     servingSize: 2,
     categoryId: 'cat-1',
-    ingredients: [{ ingredientId: 'ing-pollo', quantity: 200, unit: Unit.GRAMS }],
+    ingredients: [
+      { ingredientId: 'ing-pollo', quantity: 200, unit: Unit.GRAMS },
+    ],
   });
 
   beforeEach(async () => {
@@ -97,10 +99,16 @@ describe('RecipesService', () => {
       providers: [
         RecipesService,
         { provide: getRepositoryToken(Recipe), useValue: recipes },
-        { provide: getRepositoryToken(RecipeIngredient), useValue: recipeIngredients },
+        {
+          provide: getRepositoryToken(RecipeIngredient),
+          useValue: recipeIngredients,
+        },
         { provide: getRepositoryToken(Category), useValue: categories },
         { provide: getRepositoryToken(Ingredient), useValue: ingredients },
-        { provide: getRepositoryToken(MealPlanEntry), useValue: mealPlanEntries },
+        {
+          provide: getRepositoryToken(MealPlanEntry),
+          useValue: mealPlanEntries,
+        },
       ],
     }).compile();
 
@@ -119,7 +127,10 @@ describe('RecipesService', () => {
         order: { name: 'ASC' },
       });
       expect(result).toEqual([
-        expect.objectContaining({ id: 'rec-1', category: { id: 'cat-1', name: 'Desayuno' } }),
+        expect.objectContaining({
+          id: 'rec-1',
+          category: { id: 'cat-1', name: 'Desayuno' },
+        }),
       ]);
     });
 
@@ -137,22 +148,41 @@ describe('RecipesService', () => {
       const { where } = recipes.find.mock.calls[0][0];
       expect(where.categoryId).toBe('cat-1');
       expect(where.name.value).toBe('%pollo%');
-      expect(where.prepTimeMinutes).toMatchObject({ type: 'lessThanOrEqual', value: 15 });
-      expect(where.calories).toMatchObject({ type: 'lessThanOrEqual', value: 500 });
-      expect(where.protein).toMatchObject({ type: 'moreThanOrEqual', value: 30 });
+      expect(where.prepTimeMinutes).toMatchObject({
+        type: 'lessThanOrEqual',
+        value: 15,
+      });
+      expect(where.calories).toMatchObject({
+        type: 'lessThanOrEqual',
+        value: 500,
+      });
+      expect(where.protein).toMatchObject({
+        type: 'moreThanOrEqual',
+        value: 30,
+      });
     });
   });
 
   describe('findOne', () => {
     it('devuelve la receta con sus líneas de ingredientes', async () => {
       recipeIngredients.find.mockResolvedValue([
-        { ingredientId: 'ing-pollo', ingredient: pollo, quantity: 200, unit: Unit.GRAMS },
+        {
+          ingredientId: 'ing-pollo',
+          ingredient: pollo,
+          quantity: 200,
+          unit: Unit.GRAMS,
+        },
       ]);
 
       const detail = await service.findOne('rec-1');
 
       expect(detail.ingredients).toEqual([
-        { ingredientId: 'ing-pollo', name: 'Pechuga de pollo', quantity: 200, unit: Unit.GRAMS },
+        {
+          ingredientId: 'ing-pollo',
+          name: 'Pechuga de pollo',
+          quantity: 200,
+          unit: Unit.GRAMS,
+        },
       ]);
     });
 
@@ -183,22 +213,47 @@ describe('RecipesService', () => {
         fat: 3.6,
       });
       expect(manager.save).toHaveBeenLastCalledWith([
-        { recipeId: 'rec-1', ingredientId: 'ing-pollo', quantity: 200, unit: Unit.GRAMS },
+        {
+          recipeId: 'rec-1',
+          ingredientId: 'ing-pollo',
+          quantity: 200,
+          unit: Unit.GRAMS,
+        },
       ]);
     });
 
     it('lanza Conflict si ya existe una receta con ese nombre', async () => {
       recipes.findOneBy.mockResolvedValue(storedRecipe({ id: 'otra' }));
 
-      await expect(service.create(createDto())).rejects.toThrow(ConflictException);
+      await expect(service.create(createDto())).rejects.toThrow(
+        ConflictException,
+      );
       expect(recipes.manager.transaction).not.toHaveBeenCalled();
+    });
+
+    it('lanza Conflict si la base rechaza el nombre repetido (peticiones simultáneas)', async () => {
+      recipes.findOneBy.mockResolvedValue(null);
+      ingredients.findBy.mockResolvedValue([pollo]);
+      manager.save.mockRejectedValueOnce(
+        new QueryFailedError(
+          'INSERT',
+          [],
+          Object.assign(new Error('dup'), { code: '23505' }),
+        ),
+      );
+
+      await expect(service.create(createDto())).rejects.toThrow(
+        new ConflictException('Ya existe una receta con ese nombre'),
+      );
     });
 
     it('lanza NotFound si la categoría no existe', async () => {
       recipes.findOneBy.mockResolvedValue(null);
       categories.existsBy.mockResolvedValue(false);
 
-      await expect(service.create(createDto())).rejects.toThrow(/categoría cat-1/);
+      await expect(service.create(createDto())).rejects.toThrow(
+        /categoría cat-1/,
+      );
     });
 
     it('lanza NotFound diciendo qué ingredientes no existen', async () => {
@@ -235,7 +290,10 @@ describe('RecipesService', () => {
         .mockResolvedValueOnce(storedRecipe()) // la receta
         .mockResolvedValueOnce(null); // el nombre está libre
 
-      await service.update('rec-1', { name: 'Pollo distinto', prepTimeMinutes: 25 });
+      await service.update('rec-1', {
+        name: 'Pollo distinto',
+        prepTimeMinutes: 25,
+      });
 
       expect(manager.delete).not.toHaveBeenCalled();
       expect(manager.update).toHaveBeenCalledWith(
@@ -273,12 +331,21 @@ describe('RecipesService', () => {
       ingredients.findBy.mockResolvedValue([huevo]);
 
       await service.update('rec-1', {
-        ingredients: [{ ingredientId: 'ing-huevo', quantity: 4, unit: Unit.UNIT }],
+        ingredients: [
+          { ingredientId: 'ing-huevo', quantity: 4, unit: Unit.UNIT },
+        ],
       });
 
-      expect(manager.delete).toHaveBeenCalledWith(RecipeIngredient, { recipeId: 'rec-1' });
+      expect(manager.delete).toHaveBeenCalledWith(RecipeIngredient, {
+        recipeId: 'rec-1',
+      });
       expect(manager.save).toHaveBeenCalledWith([
-        { recipeId: 'rec-1', ingredientId: 'ing-huevo', quantity: 4, unit: Unit.UNIT },
+        {
+          recipeId: 'rec-1',
+          ingredientId: 'ing-huevo',
+          quantity: 4,
+          unit: Unit.UNIT,
+        },
       ]);
       // 4 huevos x 50 g = 200 g, entre 2 porciones
       expect(manager.update).toHaveBeenCalledWith(
@@ -292,9 +359,9 @@ describe('RecipesService', () => {
       recipes.findOneBy.mockResolvedValueOnce(storedRecipe());
       categories.existsBy.mockResolvedValue(false);
 
-      await expect(service.update('rec-1', { categoryId: 'cat-x' })).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.update('rec-1', { categoryId: 'cat-x' }),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('lanza Conflict si el nombre es de otra receta', async () => {
@@ -304,6 +371,23 @@ describe('RecipesService', () => {
 
       await expect(service.update('rec-1', { name: 'Ajeno' })).rejects.toThrow(
         ConflictException,
+      );
+    });
+
+    it('lanza Conflict si la base rechaza el nombre repetido (peticiones simultáneas)', async () => {
+      recipes.findOneBy
+        .mockResolvedValueOnce(storedRecipe())
+        .mockResolvedValueOnce(null);
+      manager.update.mockRejectedValueOnce(
+        new QueryFailedError(
+          'UPDATE',
+          [],
+          Object.assign(new Error('dup'), { code: '23505' }),
+        ),
+      );
+
+      await expect(service.update('rec-1', { name: 'Ajeno' })).rejects.toThrow(
+        new ConflictException('Ya existe una receta con ese nombre'),
       );
     });
   });
@@ -337,7 +421,11 @@ describe('RecipesService', () => {
       recipes.findOneBy.mockResolvedValue(storedRecipe());
       mealPlanEntries.existsBy.mockResolvedValue(false);
       recipes.remove.mockRejectedValue(
-        new QueryFailedError('DELETE', [], Object.assign(new Error('fk'), { code: '23503' })),
+        new QueryFailedError(
+          'DELETE',
+          [],
+          Object.assign(new Error('fk'), { code: '23503' }),
+        ),
       );
 
       await expect(service.remove('rec-1')).rejects.toThrow(ConflictException);

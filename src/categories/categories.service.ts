@@ -4,11 +4,15 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Raw, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
+import { conflictOnUniqueViolation } from '../common/database/pg-errors.js';
+import { ensureNameIsFree } from '../common/database/unique-name.js';
 import { Recipe } from '../recipes/entities/recipe.entity.js';
 import { CreateCategoryDto } from './dto/create-category.dto.js';
 import { UpdateCategoryDto } from './dto/update-category.dto.js';
 import { Category } from './entities/category.entity.js';
+
+const NAME_TAKEN = 'Ya existe una categoría con ese nombre';
 
 @Injectable()
 export class CategoriesService {
@@ -29,17 +33,23 @@ export class CategoriesService {
   }
 
   async create(dto: CreateCategoryDto): Promise<Category> {
-    await this.ensureNameIsFree(dto.name);
-    return this.categories.save(this.categories.create({ name: dto.name }));
+    await ensureNameIsFree(this.categories, dto.name, NAME_TAKEN);
+    return conflictOnUniqueViolation(
+      () => this.categories.save(this.categories.create({ name: dto.name })),
+      NAME_TAKEN,
+    );
   }
 
   async update(id: string, dto: UpdateCategoryDto): Promise<Category> {
     const category = await this.findOne(id);
     if (dto.name !== undefined) {
-      await this.ensureNameIsFree(dto.name, id);
+      await ensureNameIsFree(this.categories, dto.name, NAME_TAKEN, id);
       category.name = dto.name;
     }
-    return this.categories.save(category);
+    return conflictOnUniqueViolation(
+      () => this.categories.save(category),
+      NAME_TAKEN,
+    );
   }
 
   // No se puede borrar una categoría que tenga recetas (la llave foránea es RESTRICT)
@@ -51,15 +61,5 @@ export class CategoriesService {
       );
     }
     await this.categories.remove(category);
-  }
-
-  // El nombre es único sin distinguir mayúsculas ("Snack" y "snack" son la misma categoría)
-  private async ensureNameIsFree(name: string, excludeId?: string) {
-    const existing = await this.categories.findOneBy({
-      name: Raw((alias) => `LOWER(${alias}) = LOWER(:name)`, { name }),
-    });
-    if (existing && existing.id !== excludeId) {
-      throw new ConflictException('Ya existe una categoría con ese nombre');
-    }
   }
 }
