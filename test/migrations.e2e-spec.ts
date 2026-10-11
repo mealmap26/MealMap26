@@ -30,7 +30,9 @@ describe('Migraciones (e2e)', () => {
   beforeAll(async () => {
     // Se toma la lista de entidades de la app real: así, una entidad nueva queda incluida sola
     const { app, dataSource: appDataSource } = await createTestApp();
-    const entities = appDataSource.entityMetadatas.map((m) => m.target as Function);
+    const entities = appDataSource.entityMetadatas.map(
+      (m) => m.target as Function,
+    );
     await app.close();
 
     // Base vacía + solo migraciones (sin synchronize), como en producción
@@ -81,6 +83,24 @@ describe('Migraciones (e2e)', () => {
         `INSERT INTO meal_plans ("userId", "weekStartDate") VALUES (gen_random_uuid(), '2026-10-12')`,
       ),
     ).rejects.toThrow(/foreign key/i);
+  });
+
+  it('los nombres del catálogo son únicos sin distinguir mayúsculas', async () => {
+    const indexes: { indexname: string }[] = await dataSource.query(
+      `SELECT indexname FROM pg_indexes
+        WHERE schemaname = 'public' AND indexname LIKE 'IDX_%_name_lower'
+        ORDER BY indexname`,
+    );
+    expect(indexes.map((i) => i.indexname)).toEqual([
+      'IDX_categories_name_lower',
+      'IDX_ingredients_name_lower',
+      'IDX_recipes_name_lower',
+    ]);
+
+    await dataSource.query(`INSERT INTO categories (name) VALUES ('Snack')`);
+    await expect(
+      dataSource.query(`INSERT INTO categories (name) VALUES ('SNACK')`),
+    ).rejects.toThrow(/IDX_categories_name_lower/);
   });
 
   it('se pueden revertir: la base vuelve a quedar sin tablas', async () => {
