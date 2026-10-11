@@ -133,6 +133,14 @@ describe('Categorías (e2e)', () => {
         .expect(409);
     });
 
+    it('al renombrar responde 400 si el nombre es null', async () => {
+      await http()
+        .patch(`/categories/${createdId}`)
+        .set(auth(adminToken))
+        .send({ name: null })
+        .expect(400);
+    });
+
     it('al renombrar responde 404 si no existe', async () => {
       await http()
         .patch(`/categories/${MISSING_ID}`)

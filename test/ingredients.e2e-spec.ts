@@ -226,6 +226,8 @@ describe('Ingredientes (e2e)', () => {
       const kiwi = await findByName('Kiwi dorado');
 
       await http().patch(`/ingredients/${kiwi.id}`).set(auth(adminToken)).send({ fatPer100g: -3 }).expect(400);
+      await http().patch(`/ingredients/${kiwi.id}`).set(auth(adminToken)).send({ name: null }).expect(400);
+      await http().patch(`/ingredients/${kiwi.id}`).set(auth(adminToken)).send({ caloriesPer100g: null }).expect(400);
       await http().patch(`/ingredients/${MISSING_ID}`).set(auth(adminToken)).send({ fatPer100g: 3 }).expect(404);
     });
   });
