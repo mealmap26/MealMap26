@@ -38,6 +38,7 @@ export class IngredientResponse {
    */
   fatPer100g: number;
 
+  // @ApiProperty explícito: el plugin de Swagger no puede inferir `nullable` de `| null`
   @ApiProperty({
     type: Number,
     nullable: true,

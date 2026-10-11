@@ -5,7 +5,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, ILike, In, Raw, Repository } from 'typeorm';
+import { EntityManager, ILike, Raw, Repository } from 'typeorm';
+import { escapeLike } from '../common/database/escape-like.js';
+import { conflictOnUniqueViolation } from '../common/database/pg-errors.js';
+import { ensureNameIsFree } from '../common/database/unique-name.js';
 import { RecipeIngredient } from '../recipes/entities/recipe-ingredient.entity.js';
 import { Recipe } from '../recipes/entities/recipe.entity.js';
 import {
@@ -25,8 +28,7 @@ const NUTRITION_FIELDS = [
   'gramsPerUnit',
 ] as const;
 
-// Escapa los comodines de LIKE para buscar el texto tal cual
-const escapeLike = (text: string) => text.replace(/[\\%_]/g, '\\$&');
+const NAME_TAKEN = 'Ya existe un ingrediente con ese nombre';
 
 @Injectable()
 export class IngredientsService {
@@ -51,31 +53,50 @@ export class IngredientsService {
   }
 
   async create(dto: CreateIngredientDto): Promise<Ingredient> {
-    await this.ensureNameIsFree(dto.name);
-    return this.ingredients.save(
-      this.ingredients.create({ ...dto, gramsPerUnit: dto.gramsPerUnit ?? null }),
+    await ensureNameIsFree(this.ingredients, dto.name, NAME_TAKEN);
+    return conflictOnUniqueViolation(
+      () =>
+        this.ingredients.save(
+          this.ingredients.create({
+            ...dto,
+            gramsPerUnit: dto.gramsPerUnit ?? null,
+          }),
+        ),
+      NAME_TAKEN,
     );
   }
 
-  // Si cambia algún valor nutricional, en la misma transacción se recalculan los macros
-  // de todas las recetas que usan el ingrediente
+  // Todo ocurre en una transacción: las lecturas, el guardado y, si cambia algún valor
+  // nutricional, el recálculo de los macros de las recetas que usan el ingrediente
   async update(id: string, dto: UpdateIngredientDto): Promise<Ingredient> {
-    const ingredient = await this.findOne(id);
-    if (dto.name !== undefined) await this.ensureNameIsFree(dto.name, id);
+    return conflictOnUniqueViolation(
+      () =>
+        this.ingredients.manager.transaction(async (manager) => {
+          const repository = manager.getRepository(Ingredient);
+          const ingredient = await repository.findOneBy({ id });
+          if (!ingredient) {
+            throw new NotFoundException('Ingrediente no encontrado');
+          }
+          if (dto.name !== undefined) {
+            await ensureNameIsFree(repository, dto.name, NAME_TAKEN, id);
+          }
 
-    const nutritionChanged = NUTRITION_FIELDS.some(
-      (field) => dto[field] !== undefined && dto[field] !== ingredient[field],
-    );
-    const changes = Object.fromEntries(
-      Object.entries(dto).filter(([, value]) => value !== undefined),
-    );
-    const updated = this.ingredients.merge(ingredient, changes);
+          const nutritionChanged = NUTRITION_FIELDS.some(
+            (field) =>
+              dto[field] !== undefined && dto[field] !== ingredient[field],
+          );
+          const changes = Object.fromEntries(
+            Object.entries(dto).filter(([, value]) => value !== undefined),
+          );
 
-    return this.ingredients.manager.transaction(async (manager) => {
-      const saved = await manager.save(updated);
-      if (nutritionChanged) await this.recomputeRecipesUsing(manager, id);
-      return saved;
-    });
+          const saved = await manager.save(
+            repository.merge(ingredient, changes),
+          );
+          if (nutritionChanged) await this.recomputeRecipesUsing(manager, id);
+          return saved;
+        }),
+      NAME_TAKEN,
+    );
   }
 
   // No se puede borrar un ingrediente que esté en alguna receta (la llave foránea es RESTRICT).
@@ -90,24 +111,39 @@ export class IngredientsService {
     await this.ingredients.remove(ingredient);
   }
 
-  private async recomputeRecipesUsing(manager: EntityManager, ingredientId: string) {
-    const usages = await manager.find(RecipeIngredient, { where: { ingredientId } });
-    const recipeIds = [...new Set(usages.map((usage) => usage.recipeId))];
-    if (recipeIds.length === 0) return;
-
-    const recipes = await manager.find(Recipe, { where: { id: In(recipeIds) } });
+  // Una sola consulta trae todas las líneas (con su ingrediente) de las recetas que usan el
+  // ingrediente, y un solo save guarda los macros nuevos de todas ellas
+  private async recomputeRecipesUsing(
+    manager: EntityManager,
+    ingredientId: string,
+  ) {
     const lines = await manager.find(RecipeIngredient, {
-      where: { recipeId: In(recipeIds) },
-      relations: { ingredient: true },
+      where: {
+        recipeId: Raw(
+          (alias) =>
+            `${alias} IN (SELECT "recipeId" FROM "recipe_ingredients" WHERE "ingredientId" = :ingredientId)`,
+          { ingredientId },
+        ),
+      },
+      relations: { recipe: true, ingredient: true },
     });
+    if (lines.length === 0) return;
 
-    for (const recipe of recipes) {
+    const linesByRecipe = new Map<string, RecipeIngredient[]>();
+    for (const line of lines) {
+      linesByRecipe.set(line.recipeId, [
+        ...(linesByRecipe.get(line.recipeId) ?? []),
+        line,
+      ]);
+    }
+
+    const updates = [...linesByRecipe.values()].map((recipeLines) => {
+      const { recipe } = recipeLines[0];
       try {
-        const macros = computeMacrosPerServing(
-          lines.filter((line) => line.recipeId === recipe.id),
-          recipe.servingSize,
-        );
-        await manager.update(Recipe, { id: recipe.id }, macros);
+        return {
+          id: recipe.id,
+          ...computeMacrosPerServing(recipeLines, recipe.servingSize),
+        };
       } catch (error) {
         if (error instanceof MissingGramsPerUnitError) {
           throw new BadRequestException(
@@ -116,16 +152,7 @@ export class IngredientsService {
         }
         throw error;
       }
-    }
-  }
-
-  // El nombre es único sin distinguir mayúsculas
-  private async ensureNameIsFree(name: string, excludeId?: string) {
-    const existing = await this.ingredients.findOneBy({
-      name: Raw((alias) => `LOWER(${alias}) = LOWER(:name)`, { name }),
     });
-    if (existing && existing.id !== excludeId) {
-      throw new ConflictException('Ya existe un ingrediente con ese nombre');
-    }
+    await manager.save(Recipe, updates);
   }
 }

@@ -4,7 +4,6 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { QueryFailedError } from 'typeorm';
 import { Ingredient } from '../ingredients/entities/ingredient.entity.js';
 import { RecipeIngredient } from '../recipes/entities/recipe-ingredient.entity.js';
-import { Recipe } from '../recipes/entities/recipe.entity.js';
 import { UserIngredient } from './entities/user-ingredient.entity.js';
 import { FridgeService } from './fridge.service.js';
 
@@ -15,13 +14,11 @@ describe('FridgeService', () => {
     find: vi.fn(),
     findBy: vi.fn(),
     findOneBy: vi.fn(),
-    existsBy: vi.fn(),
     create: vi.fn(),
     save: vi.fn(),
     remove: vi.fn(),
   };
   const ingredients = { findOneBy: vi.fn() };
-  const recipes = { find: vi.fn() };
   const recipeIngredients = { find: vi.fn() };
 
   const arroz = { id: 'ing-arroz', name: 'Arroz blanco' };
@@ -35,8 +32,10 @@ describe('FridgeService', () => {
         FridgeService,
         { provide: getRepositoryToken(UserIngredient), useValue: fridge },
         { provide: getRepositoryToken(Ingredient), useValue: ingredients },
-        { provide: getRepositoryToken(Recipe), useValue: recipes },
-        { provide: getRepositoryToken(RecipeIngredient), useValue: recipeIngredients },
+        {
+          provide: getRepositoryToken(RecipeIngredient),
+          useValue: recipeIngredients,
+        },
       ],
     }).compile();
 
@@ -44,7 +43,9 @@ describe('FridgeService', () => {
   });
 
   it('list devuelve los ingredientes del usuario con su nombre', async () => {
-    fridge.find.mockResolvedValue([{ ingredientId: 'ing-arroz', ingredient: arroz }]);
+    fridge.find.mockResolvedValue([
+      { ingredientId: 'ing-arroz', ingredient: arroz },
+    ]);
 
     await expect(service.list('user-1')).resolves.toEqual([
       { ingredientId: 'ing-arroz', name: 'Arroz blanco' },
@@ -57,45 +58,47 @@ describe('FridgeService', () => {
   describe('add', () => {
     it('agrega el ingrediente y lo devuelve', async () => {
       ingredients.findOneBy.mockResolvedValue(arroz);
-      fridge.existsBy.mockResolvedValue(false);
 
       await expect(service.add('user-1', 'ing-arroz')).resolves.toEqual({
         ingredientId: 'ing-arroz',
         name: 'Arroz blanco',
       });
-      expect(fridge.save).toHaveBeenCalledWith({ userId: 'user-1', ingredientId: 'ing-arroz' });
+      expect(fridge.save).toHaveBeenCalledWith({
+        userId: 'user-1',
+        ingredientId: 'ing-arroz',
+      });
     });
 
     it('lanza NotFound si el ingrediente no existe', async () => {
       ingredients.findOneBy.mockResolvedValue(null);
 
-      await expect(service.add('user-1', 'ing-x')).rejects.toThrow(NotFoundException);
+      await expect(service.add('user-1', 'ing-x')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
-    it('lanza Conflict si ya está en la nevera', async () => {
+    it('lanza Conflict si ya está en la nevera (la base rechaza el duplicado)', async () => {
       ingredients.findOneBy.mockResolvedValue(arroz);
-      fridge.existsBy.mockResolvedValue(true);
-
-      await expect(service.add('user-1', 'ing-arroz')).rejects.toThrow(ConflictException);
-      expect(fridge.save).not.toHaveBeenCalled();
-    });
-
-    it('lanza Conflict si la base rechaza el duplicado (peticiones simultáneas)', async () => {
-      ingredients.findOneBy.mockResolvedValue(arroz);
-      fridge.existsBy.mockResolvedValue(false);
       fridge.save.mockRejectedValue(
-        new QueryFailedError('INSERT', [], Object.assign(new Error('dup'), { code: '23505' })),
+        new QueryFailedError(
+          'INSERT',
+          [],
+          Object.assign(new Error('dup'), { code: '23505' }),
+        ),
       );
 
-      await expect(service.add('user-1', 'ing-arroz')).rejects.toThrow(ConflictException);
+      await expect(service.add('user-1', 'ing-arroz')).rejects.toThrow(
+        new ConflictException('El ingrediente ya está en tu nevera'),
+      );
     });
 
     it('propaga otros errores de la base', async () => {
       ingredients.findOneBy.mockResolvedValue(arroz);
-      fridge.existsBy.mockResolvedValue(false);
       fridge.save.mockRejectedValue(new Error('se cayó la base'));
 
-      await expect(service.add('user-1', 'ing-arroz')).rejects.toThrow('se cayó la base');
+      await expect(service.add('user-1', 'ing-arroz')).rejects.toThrow(
+        'se cayó la base',
+      );
     });
   });
 
@@ -106,14 +109,19 @@ describe('FridgeService', () => {
 
       await service.remove('user-1', 'ing-arroz');
 
-      expect(fridge.findOneBy).toHaveBeenCalledWith({ userId: 'user-1', ingredientId: 'ing-arroz' });
+      expect(fridge.findOneBy).toHaveBeenCalledWith({
+        userId: 'user-1',
+        ingredientId: 'ing-arroz',
+      });
       expect(fridge.remove).toHaveBeenCalledWith(item);
     });
 
     it('lanza NotFound si no está en la nevera', async () => {
       fridge.findOneBy.mockResolvedValue(null);
 
-      await expect(service.remove('user-1', 'ing-arroz')).rejects.toThrow(NotFoundException);
+      await expect(service.remove('user-1', 'ing-arroz')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -122,20 +130,41 @@ describe('FridgeService', () => {
       fridge.findBy.mockResolvedValue([]);
 
       await expect(service.suggestions('user-1')).resolves.toEqual([]);
-      expect(recipes.find).not.toHaveBeenCalled();
+      expect(recipeIngredients.find).not.toHaveBeenCalled();
     });
 
     it('arma el catálogo con los ingredientes de cada receta y aplica maxMissing', async () => {
       fridge.findBy.mockResolvedValue([{ ingredientId: 'ing-arroz' }]);
       const category = { id: 'cat-1', name: 'Rápido' };
-      recipes.find.mockResolvedValue([
-        { id: 'r1', name: 'Arroz solo', prepTimeMinutes: 5, calories: 1, protein: 1, carbs: 1, fat: 1, category },
-        { id: 'r2', name: 'Arroz con huevo', prepTimeMinutes: 5, calories: 1, protein: 1, carbs: 1, fat: 1, category },
-      ]);
+      const macros = {
+        prepTimeMinutes: 5,
+        calories: 1,
+        protein: 1,
+        carbs: 1,
+        fat: 1,
+        category,
+      };
+      const r1 = { id: 'r1', name: 'Arroz solo', ...macros };
+      const r2 = { id: 'r2', name: 'Arroz con huevo', ...macros };
       recipeIngredients.find.mockResolvedValue([
-        { recipeId: 'r1', ingredientId: 'ing-arroz', ingredient: arroz },
-        { recipeId: 'r2', ingredientId: 'ing-arroz', ingredient: arroz },
-        { recipeId: 'r2', ingredientId: 'ing-huevo', ingredient: { name: 'Huevo' } },
+        {
+          recipeId: 'r1',
+          recipe: r1,
+          ingredientId: 'ing-arroz',
+          ingredient: arroz,
+        },
+        {
+          recipeId: 'r2',
+          recipe: r2,
+          ingredientId: 'ing-arroz',
+          ingredient: arroz,
+        },
+        {
+          recipeId: 'r2',
+          recipe: r2,
+          ingredientId: 'ing-huevo',
+          ingredient: { name: 'Huevo' },
+        },
       ]);
 
       const exact = await service.suggestions('user-1');
@@ -143,8 +172,27 @@ describe('FridgeService', () => {
 
       const near = await service.suggestions('user-1', 1);
       expect(near.map((s) => s.recipe.id)).toEqual(['r1', 'r2']);
-      expect(near[1].missingIngredients).toEqual([{ id: 'ing-huevo', name: 'Huevo' }]);
+      expect(near[1].missingIngredients).toEqual([
+        { id: 'ing-huevo', name: 'Huevo' },
+      ]);
       expect(near[1].recipe.category).toEqual(category);
+    });
+
+    it('solo consulta las recetas que comparten algún ingrediente con la nevera del usuario', async () => {
+      fridge.findBy.mockResolvedValue([{ ingredientId: 'ing-arroz' }]);
+      recipeIngredients.find.mockResolvedValue([]);
+
+      await expect(service.suggestions('user-1', 5)).resolves.toEqual([]);
+
+      const { where, relations } = recipeIngredients.find.mock.calls[0][0];
+      expect(where.recipeId.getSql('"recipeId"')).toMatch(/"user_ingredients"/);
+      expect(where.recipeId.objectLiteralParameters).toEqual({
+        userId: 'user-1',
+      });
+      expect(relations).toEqual({
+        recipe: { category: true },
+        ingredient: true,
+      });
     });
   });
 });

@@ -31,7 +31,12 @@ export class RecipeSummaryResponse {
    */
   name: string;
 
-  @ApiProperty({ type: String, nullable: true, example: 'Pechuga a la plancha con arroz blanco y brócoli al vapor.' })
+  // @ApiProperty explícito: el plugin de Swagger no puede inferir `nullable` de `| null`
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    example: 'Pechuga a la plancha con arroz blanco y brócoli al vapor.',
+  })
   description: string | null;
 
   /**
