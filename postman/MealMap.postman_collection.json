@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "MealMap API",
-    "description": "Pruebas de la API de MealMap (seed, Auth, 2FA, logout, catálogo y nevera). Ejecútala completa con el Collection Runner, en orden, usando el entorno \"MealMap - Local\". Antes: docker compose up -d y npm run start:dev.",
+    "description": "Pruebas de la API de MealMap (seed, Auth, 2FA, logout, catálogo, nevera y roles). Ejecútala completa con el Collection Runner, en orden, usando el entorno \"MealMap - Local\". Antes: docker compose up -d y npm run start:dev.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -3946,6 +3946,427 @@
           ]
         }
       ]
+    },
+    {
+      "name": "9. Usuarios - roles",
+      "description": "El ADMIN lista los usuarios y les asigna el rol con PATCH /users/:id/role. Registra un usuario nuevo, lo promueve a ADMIN y lo vuelve a dejar como USER.",
+      "item": [
+        {
+          "name": "POST /auth/register - usuario para roles",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{rolesUserEmail}}\",\n  \"password\": \"{{userPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Usuario nuevo al que el ADMIN le cambia el rol."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Email único en cada ejecución",
+                  "pm.collectionVariables.set('rolesUserEmail', `postman-roles-${Date.now()}@example.com`);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Crea el usuario con rol USER y guarda su id', () => {",
+                  "  const user = pm.response.json();",
+                  "  pm.expect(user.role).to.eql('USER');",
+                  "  pm.collectionVariables.set('rolesUserId', user.id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /auth/login - usuario para roles",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{rolesUserEmail}}\",\n  \"password\": \"{{userPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Guarda el token del USER', () => {",
+                  "  const token = pm.response.json().accessToken;",
+                  "  pm.expect(token.split('.')).to.have.lengthOf(3);",
+                  "  pm.collectionVariables.set('rolesUserToken', token);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /users - como ADMIN (200, sin contraseñas)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Guarda el id del ADMIN para probar que no puede cambiar su propio rol."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('No expone la contraseña ni el secreto del 2FA', () => {",
+                  "  pm.response.json().forEach((user) => {",
+                  "    pm.expect(user).to.have.all.keys('id', 'email', 'role', 'twoFAEnabled', 'createdAt');",
+                  "  });",
+                  "});",
+                  "pm.test('Incluye al ADMIN y al usuario nuevo', () => {",
+                  "  const users = pm.response.json();",
+                  "  const admin = users.find((u) => u.email === pm.environment.get('adminEmail'));",
+                  "  pm.expect(admin.role).to.eql('ADMIN');",
+                  "  pm.collectionVariables.set('adminUserId', admin.id);",
+                  "  pm.expect(users.map((u) => u.id)).to.include(pm.collectionVariables.get('rolesUserId'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /users - como USER (403)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{rolesUserToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH /users/:id/role - promover a ADMIN (200)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/{{rolesUserId}}/role",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "{{rolesUserId}}",
+                "role"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"ADMIN\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "El cambio aplica desde el siguiente login del usuario (el rol se lee del token)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('El usuario queda con rol ADMIN', () => {",
+                  "  const user = pm.response.json();",
+                  "  pm.expect(user.id).to.eql(pm.collectionVariables.get('rolesUserId'));",
+                  "  pm.expect(user.role).to.eql('ADMIN');",
+                  "  pm.expect(user).to.not.have.property('password');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH /users/:id/role - cambiar el propio rol (400)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/{{adminUserId}}/role",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "{{adminUserId}}",
+                "role"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"USER\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Evita que el sistema se quede sin administradores."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Explica que no puede cambiar su propio rol', () => pm.expect(pm.response.json().message).to.eql('No puedes cambiar tu propio rol'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH /users/:id/role - usuario inexistente (404)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/00000000-0000-4000-8000-000000000000/role",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "00000000-0000-4000-8000-000000000000",
+                "role"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"ADMIN\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Mensaje: Usuario no encontrado', () => pm.expect(pm.response.json().message).to.eql('Usuario no encontrado'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH /users/:id/role - volver a USER (200)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/{{rolesUserId}}/role",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "{{rolesUserId}}",
+                "role"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"USER\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('El usuario vuelve a tener rol USER', () => pm.expect(pm.response.json().role).to.eql('USER'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ],
   "variable": [
@@ -4015,6 +4436,22 @@
     },
     {
       "key": "recipeName",
+      "value": ""
+    },
+    {
+      "key": "rolesUserEmail",
+      "value": "postman-roles@example.com"
+    },
+    {
+      "key": "rolesUserId",
+      "value": ""
+    },
+    {
+      "key": "rolesUserToken",
+      "value": ""
+    },
+    {
+      "key": "adminUserId",
       "value": ""
     }
   ]
