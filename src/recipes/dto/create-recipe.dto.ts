@@ -22,39 +22,56 @@ const trim = ({ value }: { value: unknown }) =>
 
 // Los macros no se envían: el servidor los calcula a partir de los ingredientes
 export class CreateRecipeDto {
-  @ApiProperty({ example: 'Pollo al curry con arroz', description: 'Nombre único (sin distinguir mayúsculas)' })
+  @ApiProperty({
+    example: 'Pollo al curry con arroz',
+    description: 'Nombre único (sin distinguir mayúsculas)',
+  })
   @Transform(trim)
   @IsString()
   @MinLength(2)
   @MaxLength(120)
   name: string;
 
-  @ApiPropertyOptional({ type: String, nullable: true, example: 'Pollo en salsa de curry con arroz blanco.' })
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: 'Pollo en salsa de curry con arroz blanco.',
+  })
   @IsOptional()
   @Transform(trim)
   @IsString()
   @MaxLength(1000)
   description?: string | null;
 
-  @ApiProperty({ example: 25, description: 'Tiempo de preparación en minutos (1 a 600)' })
+  @ApiProperty({
+    example: 25,
+    description: 'Tiempo de preparación en minutos (1 a 600)',
+  })
   @IsInt()
   @Min(1)
   @Max(600)
   prepTimeMinutes: number;
 
-  @ApiProperty({ example: 2, description: 'Porciones que rinde la receta completa (1 a 50)' })
+  @ApiProperty({
+    example: 2,
+    description: 'Porciones que rinde la receta completa (1 a 50)',
+  })
   @IsInt()
   @Min(1)
   @Max(50)
   servingSize: number;
 
-  @ApiProperty({ example: '0b6f2a1e-6f0c-4d63-9a43-3f0f5b1f2c7d', description: 'Id de la categoría' })
+  @ApiProperty({
+    example: '0b6f2a1e-6f0c-4d63-9a43-3f0f5b1f2c7d',
+    description: 'Id de la categoría',
+  })
   @IsUUID()
   categoryId: string;
 
   @ApiProperty({
     type: [RecipeIngredientLineDto],
-    description: 'Al menos un ingrediente; un mismo ingrediente no puede repetirse',
+    description:
+      'Al menos un ingrediente; un mismo ingrediente no puede repetirse',
   })
   @IsArray()
   @ArrayMinSize(1)

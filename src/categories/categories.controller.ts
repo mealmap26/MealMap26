@@ -41,14 +41,17 @@ const DUPLICATED = 'Ya existe una categoría con ese nombre';
 @Controller('categories')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
-@ApiUnauthorizedResponse({ description: 'Falta el token, es inválido, expiró o la sesión fue cerrada' })
+@ApiUnauthorizedResponse({
+  description: 'Falta el token, es inválido, expiró o la sesión fue cerrada',
+})
 export class CategoriesController {
   constructor(private readonly categoriesService: CategoriesService) {}
 
   @Get()
   @ApiOperation({
     summary: 'Listar categorías',
-    description: 'Disponible para cualquier usuario autenticado. Ordenadas por nombre.',
+    description:
+      'Disponible para cualquier usuario autenticado. Ordenadas por nombre.',
   })
   @ApiOkResponse({ type: [CategoryResponse] })
   findAll() {
@@ -69,10 +72,14 @@ export class CategoriesController {
   @Roles(Role.ADMIN)
   @ApiOperation({
     summary: 'Crear una categoría (ADMIN)',
-    description: 'El nombre se guarda sin espacios al inicio ni al final y no puede repetirse (sin distinguir mayúsculas).',
+    description:
+      'El nombre se guarda sin espacios al inicio ni al final y no puede repetirse (sin distinguir mayúsculas).',
   })
   @ApiCreatedResponse({ type: CategoryResponse })
-  @ApiBadRequestResponse({ description: 'Nombre vacío, muy corto (mínimo 2), muy largo (máximo 60) o campos que no existen' })
+  @ApiBadRequestResponse({
+    description:
+      'Nombre vacío, muy corto (mínimo 2), muy largo (máximo 60) o campos que no existen',
+  })
   @ApiForbiddenResponse({ description: ONLY_ADMIN })
   @ApiConflictResponse({ description: DUPLICATED })
   create(@Body() dto: CreateCategoryDto) {
@@ -84,7 +91,9 @@ export class CategoriesController {
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Renombrar una categoría (ADMIN)' })
   @ApiOkResponse({ type: CategoryResponse })
-  @ApiBadRequestResponse({ description: 'El id no es un UUID o el nombre no es válido' })
+  @ApiBadRequestResponse({
+    description: 'El id no es un UUID o el nombre no es válido',
+  })
   @ApiForbiddenResponse({ description: ONLY_ADMIN })
   @ApiNotFoundResponse({ description: NOT_FOUND })
   @ApiConflictResponse({ description: DUPLICATED })

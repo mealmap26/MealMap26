@@ -36,7 +36,8 @@ export function suggestRecipes(
   const fridge = new Set(fridgeIngredientIds);
   if (fridge.size === 0) return [];
 
-  const ratio = (s: FridgeSuggestion) => s.matchedIngredients / s.totalIngredients;
+  const ratio = (s: FridgeSuggestion) =>
+    s.matchedIngredients / s.totalIngredients;
 
   return recipes
     .map(({ ingredients, ...recipe }) => {

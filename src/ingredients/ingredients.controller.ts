@@ -43,7 +43,9 @@ const DUPLICATED = 'Ya existe un ingrediente con ese nombre';
 @Controller('ingredients')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
-@ApiUnauthorizedResponse({ description: 'Falta el token, es inválido, expiró o la sesión fue cerrada' })
+@ApiUnauthorizedResponse({
+  description: 'Falta el token, es inválido, expiró o la sesión fue cerrada',
+})
 export class IngredientsController {
   constructor(private readonly ingredientsService: IngredientsService) {}
 
@@ -73,10 +75,14 @@ export class IngredientsController {
   @Roles(Role.ADMIN)
   @ApiOperation({
     summary: 'Crear un ingrediente (ADMIN)',
-    description: 'Los valores nutricionales son por 100 g, entre 0 y 900 y con máximo 2 decimales.',
+    description:
+      'Los valores nutricionales son por 100 g, entre 0 y 900 y con máximo 2 decimales.',
   })
   @ApiCreatedResponse({ type: IngredientResponse })
-  @ApiBadRequestResponse({ description: 'Falta un campo, un valor está fuera de rango o hay campos que no existen' })
+  @ApiBadRequestResponse({
+    description:
+      'Falta un campo, un valor está fuera de rango o hay campos que no existen',
+  })
   @ApiForbiddenResponse({ description: ONLY_ADMIN })
   @ApiConflictResponse({ description: DUPLICATED })
   create(@Body() dto: CreateIngredientDto) {
@@ -112,13 +118,16 @@ export class IngredientsController {
   @Roles(Role.ADMIN)
   @ApiOperation({
     summary: 'Eliminar un ingrediente (ADMIN)',
-    description: 'Solo se puede eliminar si ninguna receta lo usa. Se quita también de las neveras de los usuarios.',
+    description:
+      'Solo se puede eliminar si ninguna receta lo usa. Se quita también de las neveras de los usuarios.',
   })
   @ApiNoContentResponse({ description: 'Ingrediente eliminado' })
   @ApiBadRequestResponse({ description: 'El id no es un UUID' })
   @ApiForbiddenResponse({ description: ONLY_ADMIN })
   @ApiNotFoundResponse({ description: NOT_FOUND })
-  @ApiConflictResponse({ description: 'El ingrediente está en uso en alguna receta' })
+  @ApiConflictResponse({
+    description: 'El ingrediente está en uso en alguna receta',
+  })
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.ingredientsService.remove(id);
   }

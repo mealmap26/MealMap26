@@ -31,7 +31,9 @@ describe('computeMacrosPerServing', () => {
   };
 
   it('calcula los macros de una línea en gramos', () => {
-    const lines: MacroLine[] = [{ quantity: 200, unit: Unit.GRAMS, ingredient: pollo }];
+    const lines: MacroLine[] = [
+      { quantity: 200, unit: Unit.GRAMS, ingredient: pollo },
+    ];
 
     expect(computeMacrosPerServing(lines, 1)).toEqual({
       calories: 330,
@@ -42,7 +44,9 @@ describe('computeMacrosPerServing', () => {
   });
 
   it('trata los ml como gramos (densidad ~1)', () => {
-    const lines: MacroLine[] = [{ quantity: 250, unit: Unit.MILLILITERS, ingredient: leche }];
+    const lines: MacroLine[] = [
+      { quantity: 250, unit: Unit.MILLILITERS, ingredient: leche },
+    ];
 
     expect(computeMacrosPerServing(lines, 1)).toEqual({
       calories: 105,
@@ -53,7 +57,9 @@ describe('computeMacrosPerServing', () => {
   });
 
   it("convierte 'unidad' a gramos con gramsPerUnit", () => {
-    const lines: MacroLine[] = [{ quantity: 3, unit: Unit.UNIT, ingredient: huevo }];
+    const lines: MacroLine[] = [
+      { quantity: 3, unit: Unit.UNIT, ingredient: huevo },
+    ];
 
     // 3 huevos x 50 g = 150 g
     expect(computeMacrosPerServing(lines, 1)).toEqual({
@@ -79,7 +85,9 @@ describe('computeMacrosPerServing', () => {
   });
 
   it('redondea a 2 decimales', () => {
-    const lines: MacroLine[] = [{ quantity: 100, unit: Unit.GRAMS, ingredient: pollo }];
+    const lines: MacroLine[] = [
+      { quantity: 100, unit: Unit.GRAMS, ingredient: pollo },
+    ];
 
     // 165 / 3 = 55.0, 31 / 3 = 10.333..., 3.6 / 3 = 1.2
     expect(computeMacrosPerServing(lines, 3)).toEqual({
@@ -94,15 +102,28 @@ describe('computeMacrosPerServing', () => {
     "lanza MissingGramsPerUnitError si una línea en 'unidad' no tiene gramsPerUnit (%s)",
     (gramsPerUnit) => {
       const lines: MacroLine[] = [
-        { quantity: 1, unit: Unit.UNIT, ingredient: { ...pollo, gramsPerUnit } },
+        {
+          quantity: 1,
+          unit: Unit.UNIT,
+          ingredient: { ...pollo, gramsPerUnit },
+        },
       ];
 
-      expect(() => computeMacrosPerServing(lines, 1)).toThrow(MissingGramsPerUnitError);
-      expect(() => computeMacrosPerServing(lines, 1)).toThrow(/Pechuga de pollo/);
+      expect(() => computeMacrosPerServing(lines, 1)).toThrow(
+        MissingGramsPerUnitError,
+      );
+      expect(() => computeMacrosPerServing(lines, 1)).toThrow(
+        /Pechuga de pollo/,
+      );
     },
   );
 
   it('sin líneas devuelve todo en 0', () => {
-    expect(computeMacrosPerServing([], 1)).toEqual({ calories: 0, protein: 0, carbs: 0, fat: 0 });
+    expect(computeMacrosPerServing([], 1)).toEqual({
+      calories: 0,
+      protein: 0,
+      carbs: 0,
+      fat: 0,
+    });
   });
 });

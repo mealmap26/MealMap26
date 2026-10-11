@@ -48,7 +48,9 @@ const INVALID_BODY =
 @Controller('recipes')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
-@ApiUnauthorizedResponse({ description: 'Falta el token, es inválido, expiró o la sesión fue cerrada' })
+@ApiUnauthorizedResponse({
+  description: 'Falta el token, es inválido, expiró o la sesión fue cerrada',
+})
 export class RecipesController {
   constructor(private readonly recipesService: RecipesService) {}
 
@@ -59,7 +61,10 @@ export class RecipesController {
       'Disponible para cualquier usuario autenticado. Ordenadas por nombre. Los filtros son opcionales y se combinan; los macros son por porción.',
   })
   @ApiOkResponse({ type: [RecipeSummaryResponse] })
-  @ApiBadRequestResponse({ description: 'Algún filtro no es válido (por ejemplo categoryId no es un UUID o maxPrepTime no es un entero)' })
+  @ApiBadRequestResponse({
+    description:
+      'Algún filtro no es válido (por ejemplo categoryId no es un UUID o maxPrepTime no es un entero)',
+  })
   findAll(@Query() query: ListRecipesQueryDto) {
     return this.recipesService.findAll(query);
   }
@@ -67,7 +72,8 @@ export class RecipesController {
   @Get(':id')
   @ApiOperation({
     summary: 'Ver una receta con sus ingredientes',
-    description: 'Las cantidades de los ingredientes son para la receta completa; los macros, por porción.',
+    description:
+      'Las cantidades de los ingredientes son para la receta completa; los macros, por porción.',
   })
   @ApiOkResponse({ type: RecipeDetailResponse })
   @ApiBadRequestResponse({ description: 'El id no es un UUID' })
@@ -87,7 +93,10 @@ export class RecipesController {
   @ApiCreatedResponse({ type: RecipeDetailResponse })
   @ApiBadRequestResponse({ description: INVALID_BODY })
   @ApiForbiddenResponse({ description: ONLY_ADMIN })
-  @ApiNotFoundResponse({ description: 'La categoría o alguno de los ingredientes no existe (el mensaje dice cuáles)' })
+  @ApiNotFoundResponse({
+    description:
+      'La categoría o alguno de los ingredientes no existe (el mensaje dice cuáles)',
+  })
   @ApiConflictResponse({ description: DUPLICATED })
   create(@Body() dto: CreateRecipeDto) {
     return this.recipesService.create(dto);
@@ -102,9 +111,14 @@ export class RecipesController {
       'Actualización parcial. Si se envía `ingredients`, reemplaza todas las líneas. Los macros se recalculan cuando cambian los ingredientes o `servingSize`.',
   })
   @ApiOkResponse({ type: RecipeDetailResponse })
-  @ApiBadRequestResponse({ description: `El id no es un UUID. ${INVALID_BODY}` })
+  @ApiBadRequestResponse({
+    description: `El id no es un UUID. ${INVALID_BODY}`,
+  })
   @ApiForbiddenResponse({ description: ONLY_ADMIN })
-  @ApiNotFoundResponse({ description: 'La receta, la categoría o alguno de los ingredientes no existe' })
+  @ApiNotFoundResponse({
+    description:
+      'La receta, la categoría o alguno de los ingredientes no existe',
+  })
   @ApiConflictResponse({ description: DUPLICATED })
   update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateRecipeDto) {
     return this.recipesService.update(id, dto);
@@ -116,13 +130,16 @@ export class RecipesController {
   @Roles(Role.ADMIN)
   @ApiOperation({
     summary: 'Eliminar una receta (ADMIN)',
-    description: 'Borra también sus líneas de ingredientes. No se puede si está asignada en algún plan semanal.',
+    description:
+      'Borra también sus líneas de ingredientes. No se puede si está asignada en algún plan semanal.',
   })
   @ApiNoContentResponse({ description: 'Receta eliminada' })
   @ApiBadRequestResponse({ description: 'El id no es un UUID' })
   @ApiForbiddenResponse({ description: ONLY_ADMIN })
   @ApiNotFoundResponse({ description: NOT_FOUND })
-  @ApiConflictResponse({ description: 'La receta está asignada en algún plan semanal' })
+  @ApiConflictResponse({
+    description: 'La receta está asignada en algún plan semanal',
+  })
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.recipesService.remove(id);
   }

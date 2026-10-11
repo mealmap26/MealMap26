@@ -37,22 +37,39 @@ describe('Recetas (e2e)', () => {
 
   beforeAll(async () => {
     ({ app, dataSource } = await createTestApp());
-    await http().post('/seed').set('x-seed-key', process.env.SEED_KEY as string).expect(201);
+    await http()
+      .post('/seed')
+      .set('x-seed-key', process.env.SEED_KEY as string)
+      .expect(201);
 
     const password = 'password123';
-    await http().post('/auth/register').send({ email: 'rita@example.com', password }).expect(201);
-    const login = await http().post('/auth/login').send({ email: 'rita@example.com', password }).expect(200);
+    await http()
+      .post('/auth/register')
+      .send({ email: 'rita@example.com', password })
+      .expect(201);
+    const login = await http()
+      .post('/auth/login')
+      .send({ email: 'rita@example.com', password })
+      .expect(200);
     userToken = login.body.accessToken;
 
     const adminLogin = await http()
       .post('/auth/login')
-      .send({ email: process.env.ADMIN_EMAIL, password: process.env.ADMIN_PASSWORD })
+      .send({
+        email: process.env.ADMIN_EMAIL,
+        password: process.env.ADMIN_PASSWORD,
+      })
       .expect(200);
     adminToken = adminLogin.body.accessToken;
 
-    desayunoId = (await dataSource.getRepository(Category).findOneByOrFail({ name: 'Desayuno' })).id;
+    desayunoId = (
+      await dataSource
+        .getRepository(Category)
+        .findOneByOrFail({ name: 'Desayuno' })
+    ).id;
     const ingredients = dataSource.getRepository(Ingredient);
-    polloId = (await ingredients.findOneByOrFail({ name: 'Pechuga de pollo' })).id;
+    polloId = (await ingredients.findOneByOrFail({ name: 'Pechuga de pollo' }))
+      .id;
     huevoId = (await ingredients.findOneByOrFail({ name: 'Huevo' })).id;
     arrozId = (await ingredients.findOneByOrFail({ name: 'Arroz blanco' })).id;
   });
@@ -90,7 +107,11 @@ describe('Recetas (e2e)', () => {
       ['patch', `/recipes/${MISSING_ID}`],
       ['delete', `/recipes/${MISSING_ID}`],
     ] as const)('%s %s responde 403 para un USER', async (method, path) => {
-      await http()[method](path).set(auth(userToken)).send(newRecipe()).expect(403);
+      await http()
+        [method](path)
+        .set(auth(userToken))
+        .send(newRecipe())
+        .expect(403);
     });
   });
 
@@ -99,23 +120,42 @@ describe('Recetas (e2e)', () => {
       const res = await http().get('/recipes').set(auth(userToken)).expect(200);
 
       expect(res.body).toHaveLength(RECIPES.length);
-      const ordered = await dataSource.getRepository(Recipe).find({ order: { name: 'ASC' } });
-      expect(res.body.map((r: RecipeBody) => r.name)).toEqual(ordered.map((r) => r.name));
-      expect(res.body[0].category).toEqual({ id: expect.any(String), name: expect.any(String) });
+      const ordered = await dataSource
+        .getRepository(Recipe)
+        .find({ order: { name: 'ASC' } });
+      expect(res.body.map((r: RecipeBody) => r.name)).toEqual(
+        ordered.map((r) => r.name),
+      );
+      expect(res.body[0].category).toEqual({
+        id: expect.any(String),
+        name: expect.any(String),
+      });
       expect(typeof res.body[0].calories).toBe('number');
     });
 
     it('filtra por categoría', async () => {
-      const res = await http().get(`/recipes?categoryId=${desayunoId}`).set(auth(userToken)).expect(200);
+      const res = await http()
+        .get(`/recipes?categoryId=${desayunoId}`)
+        .set(auth(userToken))
+        .expect(200);
 
-      expect(res.body).toHaveLength(RECIPES.filter((r) => r.category === 'Desayuno').length);
-      expect(res.body.every((r: RecipeBody) => r.category.name === 'Desayuno')).toBe(true);
+      expect(res.body).toHaveLength(
+        RECIPES.filter((r) => r.category === 'Desayuno').length,
+      );
+      expect(
+        res.body.every((r: RecipeBody) => r.category.name === 'Desayuno'),
+      ).toBe(true);
     });
 
     it('filtra por nombre, tiempo, calorías y proteína (combinados)', async () => {
-      const bySearch = await http().get('/recipes?search=POLLO').set(auth(userToken)).expect(200);
+      const bySearch = await http()
+        .get('/recipes?search=POLLO')
+        .set(auth(userToken))
+        .expect(200);
       expect(bySearch.body.length).toBeGreaterThan(0);
-      expect(bySearch.body.every((r: RecipeBody) => /pollo/i.test(r.name))).toBe(true);
+      expect(
+        bySearch.body.every((r: RecipeBody) => /pollo/i.test(r.name)),
+      ).toBe(true);
 
       const res = await http()
         .get('/recipes?maxPrepTime=20&maxCalories=600&minProtein=20')
@@ -131,7 +171,10 @@ describe('Recetas (e2e)', () => {
     });
 
     it('sin coincidencias devuelve una lista vacía', async () => {
-      const res = await http().get('/recipes?search=zzz-no-existe').set(auth(userToken)).expect(200);
+      const res = await http()
+        .get('/recipes?search=zzz-no-existe')
+        .set(auth(userToken))
+        .expect(200);
 
       expect(res.body).toEqual([]);
     });
@@ -149,11 +192,20 @@ describe('Recetas (e2e)', () => {
 
   describe('GET /recipes/:id', () => {
     it('devuelve la receta con sus ingredientes', async () => {
-      const recipe = await dataSource.getRepository(Recipe).findOneByOrFail({ name: 'Pollo con arroz y brócoli' });
+      const recipe = await dataSource
+        .getRepository(Recipe)
+        .findOneByOrFail({ name: 'Pollo con arroz y brócoli' });
 
-      const res = await http().get(`/recipes/${recipe.id}`).set(auth(userToken)).expect(200);
+      const res = await http()
+        .get(`/recipes/${recipe.id}`)
+        .set(auth(userToken))
+        .expect(200);
 
-      expect(res.body).toMatchObject({ id: recipe.id, name: 'Pollo con arroz y brócoli', servingSize: 2 });
+      expect(res.body).toMatchObject({
+        id: recipe.id,
+        name: 'Pollo con arroz y brócoli',
+        servingSize: 2,
+      });
       expect(res.body.ingredients).toHaveLength(5);
       expect(res.body.ingredients).toContainEqual({
         ingredientId: polloId,
@@ -164,7 +216,10 @@ describe('Recetas (e2e)', () => {
     });
 
     it('responde 404 si no existe y 400 si el id no es un UUID', async () => {
-      await http().get(`/recipes/${MISSING_ID}`).set(auth(userToken)).expect(404);
+      await http()
+        .get(`/recipes/${MISSING_ID}`)
+        .set(auth(userToken))
+        .expect(404);
       await http().get('/recipes/abc').set(auth(userToken)).expect(400);
     });
   });
@@ -173,7 +228,11 @@ describe('Recetas (e2e)', () => {
     let createdId: string;
 
     it('crea la receta y calcula los macros por porción', async () => {
-      const res = await http().post('/recipes').set(auth(adminToken)).send(newRecipe()).expect(201);
+      const res = await http()
+        .post('/recipes')
+        .set(auth(adminToken))
+        .send(newRecipe())
+        .expect(201);
 
       // (330 + 143) kcal / 2, (62 + 12.6) g / 2, (0 + 0.7) / 2, (7.2 + 9.5) / 2
       expect(res.body).toMatchObject({
@@ -188,7 +247,11 @@ describe('Recetas (e2e)', () => {
       });
       expect(res.body.ingredients).toHaveLength(2);
       createdId = res.body.id;
-      expect(await dataSource.getRepository(RecipeIngredient).countBy({ recipeId: createdId })).toBe(2);
+      expect(
+        await dataSource
+          .getRepository(RecipeIngredient)
+          .countBy({ recipeId: createdId }),
+      ).toBe(2);
     });
 
     it('responde 409 si el nombre ya existe, sin importar mayúsculas', async () => {
@@ -204,15 +267,43 @@ describe('Recetas (e2e)', () => {
     it.each([
       ['macros enviados por el cliente', { calories: 100 }],
       ['sin ingredientes', { ingredients: [] }],
-      ['ingrediente repetido', {
-        ingredients: [
-          { ingredientId: '11111111-1111-4111-8111-111111111111', quantity: 1, unit: Unit.GRAMS },
-          { ingredientId: '11111111-1111-4111-8111-111111111111', quantity: 2, unit: Unit.GRAMS },
-        ],
-      }],
-      ['unidad inválida', { ingredients: [{ ingredientId: MISSING_ID, quantity: 1, unit: 'taza' }] }],
-      ['cantidad en 0', { ingredients: [{ ingredientId: MISSING_ID, quantity: 0, unit: Unit.GRAMS }] }],
-      ['ingredientId que no es UUID', { ingredients: [{ ingredientId: 'x', quantity: 1, unit: Unit.GRAMS }] }],
+      [
+        'ingrediente repetido',
+        {
+          ingredients: [
+            {
+              ingredientId: '11111111-1111-4111-8111-111111111111',
+              quantity: 1,
+              unit: Unit.GRAMS,
+            },
+            {
+              ingredientId: '11111111-1111-4111-8111-111111111111',
+              quantity: 2,
+              unit: Unit.GRAMS,
+            },
+          ],
+        },
+      ],
+      [
+        'unidad inválida',
+        {
+          ingredients: [
+            { ingredientId: MISSING_ID, quantity: 1, unit: 'taza' },
+          ],
+        },
+      ],
+      [
+        'cantidad en 0',
+        {
+          ingredients: [
+            { ingredientId: MISSING_ID, quantity: 0, unit: Unit.GRAMS },
+          ],
+        },
+      ],
+      [
+        'ingredientId que no es UUID',
+        { ingredients: [{ ingredientId: 'x', quantity: 1, unit: Unit.GRAMS }] },
+      ],
       ['tiempo en 0', { prepTimeMinutes: 0 }],
       ['más de 50 porciones', { servingSize: 51 }],
       ['categoryId que no es UUID', { categoryId: 'desayuno' }],
@@ -232,7 +323,9 @@ describe('Recetas (e2e)', () => {
         .send({
           ...newRecipe(),
           name: 'Pollo por unidad',
-          ingredients: [{ ingredientId: polloId, quantity: 1, unit: Unit.UNIT }],
+          ingredients: [
+            { ingredientId: polloId, quantity: 1, unit: Unit.UNIT },
+          ],
         })
         .expect(400);
 
@@ -262,7 +355,11 @@ describe('Recetas (e2e)', () => {
         .expect(404);
 
       expect(res.body.message).toContain(MISSING_ID);
-      expect(await dataSource.getRepository(Recipe).existsBy({ name: 'Con fantasma' })).toBe(false);
+      expect(
+        await dataSource
+          .getRepository(Recipe)
+          .existsBy({ name: 'Con fantasma' }),
+      ).toBe(false);
     });
 
     describe('PATCH /recipes/:id', () => {
@@ -273,21 +370,43 @@ describe('Recetas (e2e)', () => {
           .send({ servingSize: 1 })
           .expect(200);
 
-        expect(res.body).toMatchObject({ servingSize: 1, calories: 473, protein: 74.6 });
+        expect(res.body).toMatchObject({
+          servingSize: 1,
+          calories: 473,
+          protein: 74.6,
+        });
       });
 
       it('al enviar ingredientes reemplaza todas las líneas y recalcula', async () => {
         const res = await http()
           .patch(`/recipes/${createdId}`)
           .set(auth(adminToken))
-          .send({ ingredients: [{ ingredientId: arrozId, quantity: 100, unit: Unit.GRAMS }] })
+          .send({
+            ingredients: [
+              { ingredientId: arrozId, quantity: 100, unit: Unit.GRAMS },
+            ],
+          })
           .expect(200);
 
         expect(res.body.ingredients).toEqual([
-          { ingredientId: arrozId, name: 'Arroz blanco', quantity: 100, unit: Unit.GRAMS },
+          {
+            ingredientId: arrozId,
+            name: 'Arroz blanco',
+            quantity: 100,
+            unit: Unit.GRAMS,
+          },
         ]);
-        expect(res.body).toMatchObject({ calories: 365, protein: 7.1, carbs: 80, fat: 0.7 });
-        expect(await dataSource.getRepository(RecipeIngredient).countBy({ recipeId: createdId })).toBe(1);
+        expect(res.body).toMatchObject({
+          calories: 365,
+          protein: 7.1,
+          carbs: 80,
+          fat: 0.7,
+        });
+        expect(
+          await dataSource
+            .getRepository(RecipeIngredient)
+            .countBy({ recipeId: createdId }),
+        ).toBe(1);
       });
 
       it('cambia campos simples sin tocar los macros y permite borrar la descripción', async () => {
@@ -297,7 +416,12 @@ describe('Recetas (e2e)', () => {
           .send({ name: 'Arroz solo', prepTimeMinutes: 25, description: null })
           .expect(200);
 
-        expect(res.body).toMatchObject({ name: 'Arroz solo', prepTimeMinutes: 25, description: null, calories: 365 });
+        expect(res.body).toMatchObject({
+          name: 'Arroz solo',
+          prepTimeMinutes: 25,
+          description: null,
+          calories: 365,
+        });
       });
 
       it.each([
@@ -306,7 +430,11 @@ describe('Recetas (e2e)', () => {
         ['macros enviados', { protein: 10 }],
         ['lista de ingredientes vacía', { ingredients: [] }],
       ])('responde 400 con %s', async (_caso, body) => {
-        await http().patch(`/recipes/${createdId}`).set(auth(adminToken)).send(body).expect(400);
+        await http()
+          .patch(`/recipes/${createdId}`)
+          .set(auth(adminToken))
+          .send(body)
+          .expect(400);
       });
 
       it('responde 409 si el nombre es de otra receta y 404 si no existe', async () => {
@@ -315,7 +443,11 @@ describe('Recetas (e2e)', () => {
           .set(auth(adminToken))
           .send({ name: 'pollo con arroz y brócoli' })
           .expect(409);
-        await http().patch(`/recipes/${MISSING_ID}`).set(auth(adminToken)).send({ name: 'X y Z' }).expect(404);
+        await http()
+          .patch(`/recipes/${MISSING_ID}`)
+          .set(auth(adminToken))
+          .send({ name: 'X y Z' })
+          .expect(404);
       });
 
       it('responde 404 si la nueva categoría no existe', async () => {
@@ -329,26 +461,55 @@ describe('Recetas (e2e)', () => {
 
     describe('DELETE /recipes/:id', () => {
       it('elimina la receta y sus líneas (204); después responde 404', async () => {
-        await http().delete(`/recipes/${createdId}`).set(auth(adminToken)).expect(204);
+        await http()
+          .delete(`/recipes/${createdId}`)
+          .set(auth(adminToken))
+          .expect(204);
 
-        expect(await dataSource.getRepository(Recipe).existsBy({ id: createdId })).toBe(false);
-        expect(await dataSource.getRepository(RecipeIngredient).countBy({ recipeId: createdId })).toBe(0);
-        await http().delete(`/recipes/${createdId}`).set(auth(adminToken)).expect(404);
+        expect(
+          await dataSource.getRepository(Recipe).existsBy({ id: createdId }),
+        ).toBe(false);
+        expect(
+          await dataSource
+            .getRepository(RecipeIngredient)
+            .countBy({ recipeId: createdId }),
+        ).toBe(0);
+        await http()
+          .delete(`/recipes/${createdId}`)
+          .set(auth(adminToken))
+          .expect(404);
       });
 
       it('responde 409 si la receta está en un plan semanal', async () => {
         await http()
           .patch('/users/me/macros')
           .set(auth(userToken))
-          .send({ dailyCalories: 2000, dailyProtein: 150, dailyCarbs: 200, dailyFat: 67 })
+          .send({
+            dailyCalories: 2000,
+            dailyProtein: 150,
+            dailyCarbs: 200,
+            dailyFat: 67,
+          })
           .expect(200);
-        await http().post('/meal-plan/generate').set(auth(userToken)).expect(201);
-        const [entry] = await dataSource.getRepository(MealPlanEntry).find({ take: 1 });
+        await http()
+          .post('/meal-plan/generate')
+          .set(auth(userToken))
+          .expect(201);
+        const [entry] = await dataSource
+          .getRepository(MealPlanEntry)
+          .find({ take: 1 });
 
-        const res = await http().delete(`/recipes/${entry.recipeId}`).set(auth(adminToken)).expect(409);
+        const res = await http()
+          .delete(`/recipes/${entry.recipeId}`)
+          .set(auth(adminToken))
+          .expect(409);
 
         expect(res.body.message).toContain('plan');
-        expect(await dataSource.getRepository(Recipe).existsBy({ id: entry.recipeId })).toBe(true);
+        expect(
+          await dataSource
+            .getRepository(Recipe)
+            .existsBy({ id: entry.recipeId }),
+        ).toBe(true);
       });
     });
   });

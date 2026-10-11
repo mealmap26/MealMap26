@@ -97,6 +97,8 @@ describe('suggestRecipes', () => {
   });
 
   it('ignora recetas sin ingredientes', () => {
-    expect(suggestRecipes([recipe('r0', 'Vacía', [])], ['arroz'], 5)).toEqual([]);
+    expect(suggestRecipes([recipe('r0', 'Vacía', [])], ['arroz'], 5)).toEqual(
+      [],
+    );
   });
 });

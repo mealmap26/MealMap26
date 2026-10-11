@@ -19,16 +19,28 @@ describe('Categorías (e2e)', () => {
 
   beforeAll(async () => {
     ({ app, dataSource } = await createTestApp());
-    await http().post('/seed').set('x-seed-key', process.env.SEED_KEY as string).expect(201);
+    await http()
+      .post('/seed')
+      .set('x-seed-key', process.env.SEED_KEY as string)
+      .expect(201);
 
     const password = 'password123';
-    await http().post('/auth/register').send({ email: 'cata@example.com', password }).expect(201);
-    const login = await http().post('/auth/login').send({ email: 'cata@example.com', password }).expect(200);
+    await http()
+      .post('/auth/register')
+      .send({ email: 'cata@example.com', password })
+      .expect(201);
+    const login = await http()
+      .post('/auth/login')
+      .send({ email: 'cata@example.com', password })
+      .expect(200);
     userToken = login.body.accessToken;
 
     const adminLogin = await http()
       .post('/auth/login')
-      .send({ email: process.env.ADMIN_EMAIL, password: process.env.ADMIN_PASSWORD })
+      .send({
+        email: process.env.ADMIN_EMAIL,
+        password: process.env.ADMIN_PASSWORD,
+      })
       .expect(200);
     adminToken = adminLogin.body.accessToken;
   });
@@ -53,13 +65,20 @@ describe('Categorías (e2e)', () => {
       ['patch', `/categories/${MISSING_ID}`],
       ['delete', `/categories/${MISSING_ID}`],
     ] as const)('%s %s responde 403 para un USER', async (method, path) => {
-      await http()[method](path).set(auth(userToken)).send({ name: 'Nueva' }).expect(403);
+      await http()
+        [method](path)
+        .set(auth(userToken))
+        .send({ name: 'Nueva' })
+        .expect(403);
     });
   });
 
   describe('GET /categories', () => {
     it('un USER ve las categorías del seed ordenadas por nombre', async () => {
-      const res = await http().get('/categories').set(auth(userToken)).expect(200);
+      const res = await http()
+        .get('/categories')
+        .set(auth(userToken))
+        .expect(200);
 
       const names = res.body.map((c: Category) => c.name);
       expect(names).toEqual([...CATEGORIES].sort((a, b) => a.localeCompare(b)));
@@ -67,15 +86,23 @@ describe('Categorías (e2e)', () => {
     });
 
     it('GET /categories/:id devuelve una categoría', async () => {
-      const desayuno = await dataSource.getRepository(Category).findOneByOrFail({ name: 'Desayuno' });
+      const desayuno = await dataSource
+        .getRepository(Category)
+        .findOneByOrFail({ name: 'Desayuno' });
 
-      const res = await http().get(`/categories/${desayuno.id}`).set(auth(userToken)).expect(200);
+      const res = await http()
+        .get(`/categories/${desayuno.id}`)
+        .set(auth(userToken))
+        .expect(200);
 
       expect(res.body).toEqual({ id: desayuno.id, name: 'Desayuno' });
     });
 
     it('responde 404 si no existe y 400 si el id no es un UUID', async () => {
-      await http().get(`/categories/${MISSING_ID}`).set(auth(userToken)).expect(404);
+      await http()
+        .get(`/categories/${MISSING_ID}`)
+        .set(auth(userToken))
+        .expect(404);
       await http().get('/categories/abc').set(auth(userToken)).expect(400);
     });
   });
@@ -102,7 +129,11 @@ describe('Categorías (e2e)', () => {
       ['nombre que no es texto', { name: 123 }],
       ['campos que no existen', { name: 'Postres', color: 'rojo' }],
     ])('responde 400 con %s', async (_caso, body) => {
-      await http().post('/categories').set(auth(adminToken)).send(body).expect(400);
+      await http()
+        .post('/categories')
+        .set(auth(adminToken))
+        .send(body)
+        .expect(400);
     });
 
     it('responde 409 si el nombre ya existe, sin importar mayúsculas', async () => {
@@ -150,16 +181,29 @@ describe('Categorías (e2e)', () => {
     });
 
     it('responde 409 al eliminar una categoría con recetas', async () => {
-      const desayuno = await dataSource.getRepository(Category).findOneByOrFail({ name: 'Desayuno' });
+      const desayuno = await dataSource
+        .getRepository(Category)
+        .findOneByOrFail({ name: 'Desayuno' });
 
-      await http().delete(`/categories/${desayuno.id}`).set(auth(adminToken)).expect(409);
+      await http()
+        .delete(`/categories/${desayuno.id}`)
+        .set(auth(adminToken))
+        .expect(409);
     });
 
     it('elimina una categoría sin recetas (204) y luego responde 404', async () => {
-      await http().delete(`/categories/${createdId}`).set(auth(adminToken)).expect(204);
+      await http()
+        .delete(`/categories/${createdId}`)
+        .set(auth(adminToken))
+        .expect(204);
 
-      expect(await dataSource.getRepository(Category).existsBy({ id: createdId })).toBe(false);
-      await http().delete(`/categories/${createdId}`).set(auth(adminToken)).expect(404);
+      expect(
+        await dataSource.getRepository(Category).existsBy({ id: createdId }),
+      ).toBe(false);
+      await http()
+        .delete(`/categories/${createdId}`)
+        .set(auth(adminToken))
+        .expect(404);
     });
   });
 });

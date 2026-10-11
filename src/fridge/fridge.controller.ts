@@ -43,15 +43,20 @@ import { FridgeService } from './fridge.service.js';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.USER)
 @ApiBearerAuth()
-@ApiUnauthorizedResponse({ description: 'Falta el token, es inválido, expiró o la sesión fue cerrada' })
-@ApiForbiddenResponse({ description: 'Solo los usuarios con rol USER tienen nevera' })
+@ApiUnauthorizedResponse({
+  description: 'Falta el token, es inválido, expiró o la sesión fue cerrada',
+})
+@ApiForbiddenResponse({
+  description: 'Solo los usuarios con rol USER tienen nevera',
+})
 export class FridgeController {
   constructor(private readonly fridgeService: FridgeService) {}
 
   @Get()
   @ApiOperation({
     summary: 'Ver mi nevera',
-    description: 'Ingredientes disponibles del usuario (sin cantidades), ordenados por nombre.',
+    description:
+      'Ingredientes disponibles del usuario (sin cantidades), ordenados por nombre.',
   })
   @ApiOkResponse({ type: [FridgeItemResponse] })
   list(@CurrentUser() user: AuthenticatedUser) {
@@ -61,10 +66,14 @@ export class FridgeController {
   @Post()
   @ApiOperation({
     summary: 'Agregar un ingrediente a mi nevera',
-    description: 'Los ids de los ingredientes se consultan con GET /ingredients.',
+    description:
+      'Los ids de los ingredientes se consultan con GET /ingredients.',
   })
   @ApiCreatedResponse({ type: FridgeItemResponse })
-  @ApiBadRequestResponse({ description: 'ingredientId falta o no es un UUID, o hay campos que no existen' })
+  @ApiBadRequestResponse({
+    description:
+      'ingredientId falta o no es un UUID, o hay campos que no existen',
+  })
   @ApiNotFoundResponse({ description: 'No existe un ingrediente con ese id' })
   @ApiConflictResponse({ description: 'El ingrediente ya está en la nevera' })
   add(
@@ -81,7 +90,9 @@ export class FridgeController {
       'Compara los ingredientes de cada receta con los de la nevera. Por defecto devuelve solo las recetas que se pueden preparar completas; con `maxMissing` incluye también las que tienen hasta ese número de ingredientes faltantes y dice cuáles son. Ordenadas por faltantes, proporción de coincidencia y nombre. Con la nevera vacía devuelve una lista vacía.',
   })
   @ApiOkResponse({ type: [FridgeSuggestionResponse] })
-  @ApiBadRequestResponse({ description: 'maxMissing no es un entero entre 0 y 5' })
+  @ApiBadRequestResponse({
+    description: 'maxMissing no es un entero entre 0 y 5',
+  })
   suggestions(
     @CurrentUser() user: AuthenticatedUser,
     @Query() query: SuggestionsQueryDto,

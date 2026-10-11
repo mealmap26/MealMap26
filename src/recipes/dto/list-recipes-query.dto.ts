@@ -17,7 +17,10 @@ export class ListRecipesQueryDto {
   @IsUUID()
   categoryId?: string;
 
-  @ApiPropertyOptional({ example: 'pollo', description: 'El nombre contiene este texto (sin distinguir mayúsculas)' })
+  @ApiPropertyOptional({
+    example: 'pollo',
+    description: 'El nombre contiene este texto (sin distinguir mayúsculas)',
+  })
   @IsOptional()
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim() : value,
@@ -26,21 +29,30 @@ export class ListRecipesQueryDto {
   @MaxLength(120)
   search?: string;
 
-  @ApiPropertyOptional({ example: 20, description: 'Tiempo de preparación máximo (minutos)' })
+  @ApiPropertyOptional({
+    example: 20,
+    description: 'Tiempo de preparación máximo (minutos)',
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
   maxPrepTime?: number;
 
-  @ApiPropertyOptional({ example: 500, description: 'Calorías por porción máximas' })
+  @ApiPropertyOptional({
+    example: 500,
+    description: 'Calorías por porción máximas',
+  })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0)
   maxCalories?: number;
 
-  @ApiPropertyOptional({ example: 30, description: 'Proteína por porción mínima (g)' })
+  @ApiPropertyOptional({
+    example: 30,
+    description: 'Proteína por porción mínima (g)',
+  })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()

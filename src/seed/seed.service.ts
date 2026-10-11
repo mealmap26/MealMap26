@@ -66,7 +66,9 @@ export class SeedService {
       // Ingredientes
       const ingredients = new Map<string, Ingredient>();
       for (const data of INGREDIENTS) {
-        let ingredient = await manager.findOneBy(Ingredient, { name: data.name });
+        let ingredient = await manager.findOneBy(Ingredient, {
+          name: data.name,
+        });
         if (ingredient) {
           summary.ingredients.skipped++;
         } else {
@@ -108,7 +110,9 @@ export class SeedService {
         const rows = seed.ingredients.map((line) => {
           const ingredient = ingredients.get(line.ingredient);
           if (!ingredient) {
-            throw new Error(`Ingrediente inexistente en el seed: ${line.ingredient}`);
+            throw new Error(
+              `Ingrediente inexistente en el seed: ${line.ingredient}`,
+            );
           }
           return manager.create(RecipeIngredient, {
             recipeId: recipe.id,
@@ -148,7 +152,9 @@ export class SeedService {
     const lines = recipe.ingredients.map((line) => {
       const data = seedByIngredient.get(line.ingredient);
       if (!data) {
-        throw new Error(`Ingrediente inexistente en el seed: ${line.ingredient}`);
+        throw new Error(
+          `Ingrediente inexistente en el seed: ${line.ingredient}`,
+        );
       }
       return { quantity: line.quantity, unit: line.unit, ingredient: data };
     });
