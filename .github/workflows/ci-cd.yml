@@ -1,11 +1,12 @@
 name: CI/CD
 
-# CI: en cada push y en cada pull request se ejecutan lint, build y todas las pruebas
-# (unitarias + integración) con un mínimo de 80 % de cobertura.
-# CD: solo si las pruebas pasan y el push es a main, se despliega a Render.
+# CI: en cada push (a cualquier rama) y en cada pull request se ejecutan lint, build y todas
+# las pruebas (unitarias + integración) con un mínimo de 80 % de cobertura. Después se levanta
+# la API con una base real y se corre la colección de Postman con Newman.
+# CD: solo si todo pasa y el push es a main, se despliega a Render.
 on:
   push:
-    branches: [main]
+    branches: ['**']
   pull_request:
 
 permissions:
@@ -19,6 +20,9 @@ concurrency:
 jobs:
   test:
     name: Pruebas
+    # Un pull request desde una rama de este mismo repositorio ya se probó con el push de esa
+    # rama: solo se corre aquí si viene de un fork, para no ejecutar todo dos veces.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -60,10 +64,90 @@ jobs:
       - name: Pruebas unitarias y de integración con cobertura
         run: npm run test:ci
 
+  postman:
+    name: Pruebas de Postman (Newman)
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # Base vacía para la API: con NODE_ENV=development, synchronize crea las tablas al arrancar
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: mealmap
+          POSTGRES_PASSWORD: mealmap_dev
+          POSTGRES_DB: mealmap
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mealmap"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    # Valores de prueba que solo existen en este job (no son secretos reales)
+    env:
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_USER: mealmap
+      DB_PASSWORD: mealmap_dev
+      DB_NAME: mealmap
+      NODE_ENV: development
+      PORT: 3000
+      JWT_SECRET: ci-postman-jwt-secret-solo-para-pruebas
+      SEED_KEY: ci-postman-seed-key
+      ADMIN_EMAIL: admin-ci@mealmap.test
+      ADMIN_PASSWORD: Admin-CI-12345
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Levantar la API en segundo plano
+        run: nohup node dist/main > api.log 2>&1 &
+
+      # Espera hasta 60 s a que responda el documento de Swagger
+      - name: Esperar a que la API responda
+        run: |
+          for _ in $(seq 1 30); do
+            if curl --silent --fail http://localhost:3000/api-json > /dev/null; then
+              echo "API lista."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::La API no respondió a tiempo."
+          cat api.log
+          exit 1
+
+      - name: Correr la colección de Postman
+        run: >-
+          npx --yes newman@6 run postman/MealMap.postman_collection.json
+          -e postman/MealMap.postman_environment.json
+          --env-var baseUrl=http://localhost:3000
+          --env-var seedKey="$SEED_KEY"
+          --env-var adminEmail="$ADMIN_EMAIL"
+          --env-var adminPassword="$ADMIN_PASSWORD"
+
+      - name: Mostrar el log de la API si algo falló
+        if: failure()
+        run: cat api.log
+
   deploy:
     name: Despliegue a Render
-    # Solo después de que las pruebas pasen, y solo en pushes a main (no en pull requests)
-    needs: test
+    # Solo después de que pasen las pruebas y Postman, y solo en pushes a main (no en pull requests)
+    needs: [test, postman]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 5
