@@ -316,7 +316,7 @@ El proyecto exige **cobertura mínima de 80%**. Hay tres niveles de pruebas.
 |---|---|---|---|
 | Unitarias (Vitest) | `npm test` | Nada (usa mocks) | Servicios de Auth y 2FA, `RolesGuard`, `JwtStrategy`, configuración de la base, servicios de categorías, ingredientes, recetas, nevera, usuarios y plan semanal, y la lógica pura: cálculo de macros por porción, sugerencias de la nevera, generador del plan, lista de compras y semanas |
 | Integración (Supertest) | `npm run test:e2e` | `docker compose up -d` | Con HTTP real y base de datos real: Auth, 2FA, roles, seed, migraciones, CRUD del catálogo (permisos, validaciones, 404/409, macros y recálculo), nevera y sugerencias, plan semanal, lista de compras y metas de macros |
-| Postman | Ver la sección siguiente | La API corriendo | Seed, Auth, 2FA, logout, catálogo, nevera y asignación de roles, de punta a punta |
+| Postman | Ver la sección siguiente | La API corriendo | Seed, Auth, 2FA, logout, catálogo, nevera, asignación de roles, metas de macros y plan semanal, de punta a punta |
 
 Las pruebas de integración usan una base **separada**, `mealmap_test`, que se crea sola y se borra y recrea en cada archivo de prueba. **Nunca tocan tu base de desarrollo.** Con unitarias e integración juntas (`npm run test:ci`), el código de `src/` queda por encima del 99 % de sentencias y líneas; el mínimo exigido es 80 %.
 
@@ -324,7 +324,7 @@ Las pruebas de integración usan una base **separada**, `mealmap_test`, que se c
 
 En la carpeta `postman/` hay una colección lista para importar, con pruebas automáticas (aserciones) en cada petición:
 
-- `MealMap.postman_collection.json` — la colección (92 peticiones, 151 verificaciones).
+- `MealMap.postman_collection.json` — la colección (113 peticiones, 188 verificaciones).
 - `MealMap.postman_environment.json` — el entorno "MealMap - Local" con las variables.
 
 ### Cómo usarla
@@ -355,10 +355,11 @@ En la carpeta `postman/` hay una colección lista para importar, con pruebas aut
 | 7. Nevera | Sin token (401), como `ADMIN` (403), nevera y sugerencias vacías, agregar A (201), repetido (409), inexistente (404), id inválido (400), sugerencias con `maxMissing=1` (falta B), sin `maxMissing` (no aparece), agregar B, ver la nevera, sugerencias con `canPrepare: true`, `maxMissing` fuera de rango (400), quitar B (204) y quitarlo otra vez (404) |
 | 8. Limpieza | Borrar la receta como `USER` (403) y como `ADMIN` (204), los ingredientes A y B (A sale también de la nevera) y la categoría, para no dejar datos de prueba |
 | 9. Usuarios - roles | Registro de un usuario nuevo, listar usuarios como `ADMIN` (200, sin contraseñas) y como `USER` (403), promoverlo a `ADMIN` (200), que el `ADMIN` cambie su propio rol (400), usuario inexistente (404) y volverlo a `USER` (200) |
+| 10. Plan semanal y metas de macros | Usuario propio de la carpeta (no depende de las demás); seguridad de las rutas (sin token 401, como `ADMIN` 403); antes de generar: sin plan (404) y sin metas (400); validación de las metas (fuera de rango, decimales o campo desconocido: 400); configurar las 4 metas y actualizar solo una (200); generar el plan (201: 7 días con 4 comidas en orden, sin repetir receta el mismo día y cada día a ±15 % de la meta de calorías); ver el plan (200); volver a generar (reemplaza el plan) y la lista de compras (cantidades enteras, unidades válidas y un renglón por ingrediente) |
 
 Notas:
 
-- Cada ejecución registra usuarios con emails únicos (`postman-<fecha>@example.com`, `postman-nevera-<fecha>@example.com` y `postman-roles-<fecha>@example.com`) y crea la categoría, los ingredientes y la receta con nombres únicos; la carpeta 8 los borra al final. Puedes repetir la colección sin limpiar la base.
+- Cada ejecución registra usuarios con emails únicos (`postman-<fecha>@example.com`, `postman-nevera-<fecha>@example.com`, `postman-roles-<fecha>@example.com` y `postman-plan-<fecha>@example.com`) y crea la categoría, los ingredientes y la receta con nombres únicos; la carpeta 8 los borra al final. Puedes repetir la colección sin limpiar la base.
 - El código TOTP del 2FA lo calcula un script de la propia colección a partir del secreto que devuelve `/auth/2fa/enable`, igual que lo haría Google Authenticator. No necesitas el celular.
 - Si el seed ya se cargó antes, la primera petición también responde 201 (es idempotente).
 
@@ -379,7 +380,7 @@ npx --yes newman@6 run postman/MealMap.postman_collection.json \
 Al agregar endpoints nuevos, puedes:
 
 - **Importarlos de golpe:** en Postman, **Import** → pega `http://localhost:3000/api-json`. Postman genera una petición por cada ruta de Swagger.
-- **Sumarlos a la colección del equipo:** agrega una carpeta nueva en `postman/MealMap.postman_collection.json` con sus aserciones (siguiendo la numeración, por ejemplo "10. Meal prep") y expórtala de nuevo desde Postman. El CI la ejecuta en cada push.
+- **Sumarlos a la colección del equipo:** agrega una carpeta nueva en `postman/MealMap.postman_collection.json` con sus aserciones (siguiendo la numeración, con la numeración siguiente, la 11) y expórtala de nuevo desde Postman. El CI la ejecuta en cada push.
 
 ## Guía para agregar tu módulo
 
