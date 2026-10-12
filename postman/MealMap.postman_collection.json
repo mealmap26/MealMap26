@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "MealMap API",
-    "description": "Pruebas de la API de MealMap (seed, Auth, 2FA, logout, catálogo, nevera y roles). Ejecútala completa con el Collection Runner, en orden, usando el entorno \"MealMap - Local\". Antes: docker compose up -d y npm run start:dev.",
+    "description": "Pruebas de la API de MealMap (seed, Auth, 2FA, logout, catálogo, nevera, roles, metas de macros y plan semanal). Ejecútala completa con el Collection Runner, en orden, usando el entorno \"MealMap - Local\". Antes: docker compose up -d y npm run start:dev.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -4367,6 +4367,951 @@
           ]
         }
       ]
+    },
+    {
+      "name": "10. Plan semanal y metas de macros",
+      "description": "Módulo de meal prep: metas de macros (PATCH /users/me/macros), plan de 7 días (POST /meal-plan/generate, GET /meal-plan) y lista de compras (GET /meal-plan/shopping-list). Crea su propio usuario, así que no depende de las demás carpetas. Requiere el seed cargado (carpeta 0).",
+      "item": [
+        {
+          "name": "POST /auth/register - usuario para el plan semanal",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{planUserEmail}}\",\n  \"password\": \"{{userPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Email único en cada ejecución",
+                  "pm.collectionVariables.set('planUserEmail', `postman-plan-${Date.now()}@example.com`);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Rol USER', () => pm.expect(pm.response.json().role).to.eql('USER'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /auth/login - usuario del plan semanal",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{planUserEmail}}\",\n  \"password\": \"{{userPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Devuelve un JWT', () => {",
+                  "  const token = pm.response.json().accessToken;",
+                  "  pm.expect(token.split('.')).to.have.lengthOf(3);",
+                  "  pm.collectionVariables.set('planUserToken', token);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /meal-plan - sin token (401)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "noauth"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/meal-plan",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "meal-plan"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /meal-plan/generate - sin token (401)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "auth": {
+              "type": "noauth"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/meal-plan/generate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "meal-plan",
+                "generate"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /meal-plan/shopping-list - sin token (401)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "noauth"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/meal-plan/shopping-list",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "meal-plan",
+                "shopping-list"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /meal-plan/generate - como ADMIN (403, solo USER)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/meal-plan/generate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "meal-plan",
+                "generate"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /meal-plan - como ADMIN (403)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/meal-plan",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "meal-plan"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /meal-plan/shopping-list - como ADMIN (403)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/meal-plan/shopping-list",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "meal-plan",
+                "shopping-list"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /meal-plan - todavía no hay plan (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{planUserToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/meal-plan",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "meal-plan"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Indica cómo generarlo', () => pm.expect(pm.response.json().message).to.include('POST /meal-plan/generate'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /meal-plan/shopping-list - todavía no hay plan (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{planUserToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/meal-plan/shopping-list",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "meal-plan",
+                "shopping-list"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /meal-plan/generate - sin metas configuradas (400)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{planUserToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/meal-plan/generate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "meal-plan",
+                "generate"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Indica que hay que configurar las metas', () => pm.expect(pm.response.json().message).to.include('PATCH /users/me/macros'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH /users/me/macros - sin token (401)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/me/macros",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "me",
+                "macros"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dailyCalories\": 2000,\n  \"dailyProtein\": 150,\n  \"dailyCarbs\": 200,\n  \"dailyFat\": 67\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH /users/me/macros - calorías fuera de rango (400)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{planUserToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/me/macros",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "me",
+                "macros"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dailyCalories\": 100\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH /users/me/macros - valor con decimales (400)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{planUserToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/me/macros",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "me",
+                "macros"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dailyFat\": 60.5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH /users/me/macros - campo desconocido (400)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{planUserToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/me/macros",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "me",
+                "macros"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"ADMIN\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH /users/me/macros - configurar las 4 metas (200)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{planUserToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/me/macros",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "me",
+                "macros"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dailyCalories\": 2000,\n  \"dailyProtein\": 150,\n  \"dailyCarbs\": 200,\n  \"dailyFat\": 67\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Devuelve las 4 metas', () => pm.expect(pm.response.json()).to.eql({ dailyCalories: 2000, dailyProtein: 150, dailyCarbs: 200, dailyFat: 67 }));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH /users/me/macros - actualización parcial conserva las demás (200)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{planUserToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/me/macros",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "me",
+                "macros"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dailyFat\": 70\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Solo cambia la grasa', () => pm.expect(pm.response.json()).to.eql({ dailyCalories: 2000, dailyProtein: 150, dailyCarbs: 200, dailyFat: 70 }));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /meal-plan/generate - generar el plan semanal (201)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{planUserToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/meal-plan/generate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "meal-plan",
+                "generate"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201', () => pm.response.to.have.status(201));",
+                  "const plan = pm.response.json();",
+                  "pm.test('Semana que empieza un lunes', () => {",
+                  "  pm.expect(plan.weekStartDate).to.match(/^\\d{4}-\\d{2}-\\d{2}$/);",
+                  "  pm.expect(new Date(plan.weekStartDate + 'T00:00:00Z').getUTCDay()).to.eql(1);",
+                  "});",
+                  "pm.test('7 días con 4 comidas en orden', () => {",
+                  "  pm.expect(plan.days).to.have.lengthOf(7);",
+                  "  plan.days.forEach((day, index) => {",
+                  "    pm.expect(day.dayOfWeek).to.eql(index + 1);",
+                  "    pm.expect(day.meals.map((m) => m.mealType)).to.eql(['BREAKFAST', 'LUNCH', 'DINNER', 'SNACK']);",
+                  "  });",
+                  "});",
+                  "pm.test('No repite receta dentro del mismo día', () => {",
+                  "  plan.days.forEach((day) => {",
+                  "    const ids = day.meals.map((m) => m.recipe.id);",
+                  "    pm.expect(new Set(ids).size).to.eql(ids.length);",
+                  "  });",
+                  "});",
+                  "pm.test('Cada día queda cerca de la meta de 2000 kcal (±15 %)', () => {",
+                  "  plan.days.forEach((day) => {",
+                  "    pm.expect(Math.abs(day.totals.calories - 2000) / 2000).to.be.below(0.15);",
+                  "  });",
+                  "});",
+                  "pm.collectionVariables.set('planId', plan.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /meal-plan - el plan de la semana (200)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{planUserToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/meal-plan",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "meal-plan"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Es el plan que se acaba de generar', () => pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get('planId')));",
+                  "pm.test('Trae 7 días con totales de macros', () => {",
+                  "  const days = pm.response.json().days;",
+                  "  pm.expect(days).to.have.lengthOf(7);",
+                  "  days.forEach((d) => pm.expect(d.totals.calories).to.be.above(0));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /meal-plan/generate - generar de nuevo reemplaza el plan (201)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{planUserToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/meal-plan/generate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "meal-plan",
+                "generate"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Es un plan nuevo (reemplaza al anterior)', () => pm.expect(pm.response.json().id).to.not.eql(pm.collectionVariables.get('planId')));",
+                  "pm.collectionVariables.set('planId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /meal-plan/shopping-list - lista de compras (200)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{planUserToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/meal-plan/shopping-list",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "meal-plan",
+                "shopping-list"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                  "const list = pm.response.json();",
+                  "pm.test('Devuelve la semana y los ingredientes', () => {",
+                  "  pm.expect(list.weekStartDate).to.match(/^\\d{4}-\\d{2}-\\d{2}$/);",
+                  "  pm.expect(list.items.length).to.be.above(10);",
+                  "});",
+                  "pm.test('Cantidades enteras, unidad válida y texto legible', () => {",
+                  "  list.items.forEach((item) => {",
+                  "    pm.expect(Number.isInteger(item.quantity)).to.eql(true);",
+                  "    pm.expect(item.quantity).to.be.above(0);",
+                  "    pm.expect(['g', 'ml', 'unidad']).to.include(item.unit);",
+                  "    pm.expect(item.label.toLowerCase()).to.include(item.name.toLowerCase());",
+                  "  });",
+                  "});",
+                  "pm.test('Un solo renglón por ingrediente y unidad', () => {",
+                  "  const keys = list.items.map((i) => i.ingredientId + '|' + i.unit);",
+                  "  pm.expect(new Set(keys).size).to.eql(keys.length);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ],
   "variable": [
@@ -4452,6 +5397,18 @@
     },
     {
       "key": "adminUserId",
+      "value": ""
+    },
+    {
+      "key": "planUserEmail",
+      "value": ""
+    },
+    {
+      "key": "planUserToken",
+      "value": ""
+    },
+    {
+      "key": "planId",
       "value": ""
     }
   ]
