@@ -326,6 +326,7 @@ En la carpeta `postman/` hay una colección lista para importar, con pruebas aut
 
 - `MealMap.postman_collection.json` — la colección (113 peticiones, 188 verificaciones).
 - `MealMap.postman_environment.json` — el entorno "MealMap - Local" con las variables.
+- `MealMap.render.postman_environment.json` — el entorno "MealMap - Render": trae `baseUrl` apuntando a la aplicación desplegada. Los datos de acceso (`seedKey`, `adminEmail` y `adminPassword`) van en blanco porque son secretos y no se suben al repositorio; se escriben una sola vez en Postman.
 
 ### Cómo usarla
 
@@ -340,6 +341,14 @@ En la carpeta `postman/` hay una colección lista para importar, con pruebas aut
    | `adminEmail` / `adminPassword` | El `ADMIN_EMAIL` / `ADMIN_PASSWORD` de tu `.env` |
 
 4. Abre la colección y pulsa **Run** (Collection Runner). Ejecútala **completa y en orden**: las peticiones se pasan datos entre sí (el token, el secreto del 2FA).
+
+### Probar la aplicación desplegada en Render
+
+1. En Postman: **Import** y selecciona `MealMap.render.postman_environment.json` (la colección es la misma de arriba).
+2. Elige el entorno **MealMap - Render** y escribe sus tres variables en blanco: `seedKey`, `adminEmail` y `adminPassword`, los mismos valores que se pusieron en Render al crear el Blueprint.
+3. Ejecuta la colección completa y en orden con **Run**. No la corras mientras Render esté desplegando, porque el servicio se reinicia unos minutos.
+
+Si el servicio estaba dormido, la primera petición puede tardar cerca de un minuto.
 
 ### Qué prueba la colección
 
